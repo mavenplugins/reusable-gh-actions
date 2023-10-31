@@ -1,0 +1,117 @@
+# ------------------------------------------------------------------------
+# This is a workflow to build a Maven project and deploy to Sonatype repos
+# ------------------------------------------------------------------------
+name: __Reusable Maven clean package deploy
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      release_staging_to_maven_central:
+        required: false
+        type: boolean
+        description: "If true, then env.DO_NOT_RELEASE_SONATYPE_STAGING will be set to false"
+
+    secrets:
+      SONATYPE_USERNAME:
+        required: true
+      SONATYPE_PASSWORD:
+        required: true
+      OSSRH_GPG_SECRET_KEY:
+        required: true
+      OSSRH_GPG_PASSPHRASE:
+        required: true
+
+    outputs:
+      MAVEN_VERSION:
+        description: "The Maven version job1 was run on"
+        value: ${{ jobs.job1_Build_and_Deploy.outputs.MAVEN_VERSION }}
+
+jobs:
+  job1_Build_and_Deploy:
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      MAVEN_VERSION: ${{ steps.show-maven-version.outputs.MAVEN_VERSION }}
+
+    strategy:
+      matrix:
+        #maven-version: [ '3.8.3', '3.9.4' ]
+        maven-version: [ '3.8.3' ]
+
+    steps:
+      - name: Propagate env from inputs
+        run: |
+          if [[ "${{ inputs.release_staging_to_maven_central }}" == "true" ]]; then
+            echo "DO_NOT_RELEASE_SONATYPE_STAGING=false" >> $GITHUB_ENV
+          else
+            echo "DO_NOT_RELEASE_SONATYPE_STAGING=true" >> $GITHUB_ENV
+          fi
+
+      - name: Log Environment
+        run: |
+          echo "  runner:     ${{ inputs.runner }}"
+          echo "  github.ref: ${{ github.ref }}"
+          echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
+
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        
+      - name: Set up Java for publishing to Maven Central Repository
+        uses: mavenplugins/actions-setup-java@v1
+        with:
+          java-version: 1.8
+          server-id: ossrh
+          server-username: SONATYPE_USERNAME
+          server-password: SONATYPE_PASSWORD
+          gpg-private-key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
+          gpg-passphrase: OSSRH_GPG_PASSPHRASE
+
+      - name: Determine default installed Maven version
+        id: default-maven
+        run: echo "maven-version=$(mvn -q -v)" >> $GITHUB_OUTPUT
+
+      - name: Update Maven version if required
+        uses: mavenplugins/actions-setup-maven@v4.5
+        if: matrix.maven-version != steps.default-maven.outputs.maven-version
+        with:
+          maven-version: '${{ matrix.maven-version }}'
+
+      - name: Show Maven version and settings.xml
+        id: show-maven-version
+        run: |
+          mvn --version
+          echo "MAVEN_OPTS: ${MAVEN_OPTS}"
+          echo "##### BEGIN - settings.xml"
+          cat ~/.m2/settings.xml
+          echo "##### END - settings.xml"
+          # Set step outputs:
+          echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
+
+      - name: Build and package artifacts
+        run: |
+          mvn \
+            --no-transfer-progress \
+            --batch-mode \
+            clean package
+        env:
+          OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
+          # We do not want to release to Maven Central via this action!
+          # Releases shall be performed via unleash plugin only.
+          DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
+
+      - name: Publish to Sonatype and/or Maven Central Repo
+        run: |
+          mvn \
+            --no-transfer-progress \
+            --batch-mode \
+            deploy
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
+          # We do not want to release to Maven Central via this action!
+          # Releases shall be performed via unleash plugin only.
+          DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
