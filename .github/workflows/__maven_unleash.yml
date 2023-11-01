@@ -1,0 +1,214 @@
+# ---------------------------------------------
+# This is a workflow to unleash a Maven project
+# ---------------------------------------------
+name: __Reusable Maven unleash
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      release_staging_to_maven_central:
+        required: false
+        type: boolean
+        description: "If true, then env.DO_NOT_RELEASE_SONATYPE_STAGING will be set to false"
+      releaseVersion:
+        required: true
+        type: string
+      nextSnapshotVersion:
+        required: true
+        type: string
+
+    secrets:
+      SONATYPE_USERNAME:
+        required: true
+      SONATYPE_PASSWORD:
+        required: true
+      OSSRH_GPG_SECRET_KEY:
+        required: true
+      OSSRH_GPG_PASSPHRASE:
+        required: true
+
+    outputs:
+      MAVEN_VERSION:
+        description: "The Maven version job1 was run on"
+        value: ${{ jobs.job1_Build_and_Deploy.outputs.MAVEN_VERSION }}
+
+jobs:
+  job1_Unleash_Project:
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      MAVEN_VERSION: ${{ steps.show-maven-version.outputs.MAVEN_VERSION }}
+
+    strategy:
+      matrix:
+        #maven-version: [ '3.8.3', '3.9.4' ]
+        maven-version: [ '3.8.3' ]
+
+    steps:
+      - name: Propagate env from inputs
+        run: |
+          if [[ "${{ inputs.release_staging_to_maven_central }}" == "true" ]]; then
+            echo "DO_NOT_RELEASE_SONATYPE_STAGING=false" >> $GITHUB_ENV
+          else
+            echo "DO_NOT_RELEASE_SONATYPE_STAGING=true" >> $GITHUB_ENV
+          fi
+
+      - name: Log Environment
+        run: |
+          echo "  runner:     ${{ inputs.runner }}"
+          echo "  workdir:    $(pwd)"
+          echo "  homedir:    ${HOME}"
+          echo "  github.ref: ${{ github.ref }}"
+          echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
+          echo "  releaseVersion:      ${{ inputs.releaseVersion }}"
+          echo "  nextSnapshotVersion: ${{ inputs.nextSnapshotVersion }}"
+
+      - name: Validate input versions
+        run: |
+          if [[ "${{ inputs.releaseVersion }}" == *-SNAPSHOT ]]; then
+            echo "### ERROR: Illegal input - release version must NOT be a SNAPSHOT version!"
+            exit 1
+          fi
+          if [[ "${{ inputs.nextSnapshotVersion }}" != *-SNAPSHOT ]]; then
+            echo "### ERROR: Illegal input - next development version MUST be a SNAPSHOT version!"
+            exit 1
+          fi
+
+      - name: Set up Java for publishing to Maven Central Repository
+        uses: mavenplugins/actions-setup-java@v3
+        with:
+          java-version: 1.8
+          server-id: ossrh
+          server-username: SONATYPE_USERNAME
+          server-password: SONATYPE_PASSWORD
+          gpg-private-key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
+          gpg-passphrase: OSSRH_GPG_PASSPHRASE
+
+      - name: Determine default installed Maven version
+        id: default-maven
+        run: echo "maven-version=$(mvn -q -v)" >> $GITHUB_OUTPUT
+
+      - name: Update Maven version if required
+        uses: mavenplugins/actions-setup-maven@v4.5
+        if: matrix.maven-version != steps.default-maven.outputs.maven-version
+        with:
+          maven-version: '${{ matrix.maven-version }}'
+
+      - name: Show Maven version and settings.xml
+        id: show-maven-version
+        run: |
+          mvn --version
+          echo "MAVEN_OPTS: ${MAVEN_OPTS}"
+          echo "##### BEGIN - settings.xml"
+          cat ~/.m2/settings.xml
+          echo "##### END - settings.xml"
+          # Set step outputs:
+          echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
+          echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_ENV
+
+      - name: List workdir content
+        run: |
+          echo "##### BEGIN - workdir"
+          ls -alR
+          echo "##### END - workdir"
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # We need full history! - otherwise we end up in "missing commits" issue on unleash plugin
+          fetch-depth: 0
+        
+      - name: Show Maven project version
+        run: |
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          #if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
+          #  IS_SNAPSHOT_VERSION=true
+          #else
+          #  IS_SNAPSHOT_VERSION=false
+          #fi
+          echo "  MAVEN_PROJECT_VERSION: ${MAVEN_PROJECT_VERSION}"
+          #echo "  IS_SNAPSHOT_VERSION:   ${IS_SNAPSHOT_VERSION}"
+          echo "MAVEN_PROJECT_VERSION=${MAVEN_PROJECT_VERSION}" >> $GITHUB_ENV
+          #echo "IS_SNAPSHOT_VERSION=${IS_SNAPSHOT_VERSION}" >> $GITHUB_ENV
+
+      - name: Unleash project
+        run: |
+          # 
+          git config user.name "GitHub CICD"
+          git config user.email "${{ github.repository_owner }}@users.noreply.github.com"
+          UNLEASH_WORKFLOWS_DIR=~/unleash_workflows
+          mkdir -p ${UNLEASH_WORKFLOWS_DIR}
+          UNLEASH_WORKFLOW_FILE=${UNLEASH_WORKFLOWS_DIR}/perform
+          #
+          # Create custom workflow - the bash script inside the {} must be left aligned!
+          # This is the original default workflow with customization as commented below.
+          {
+          cat <<EOF >${UNLEASH_WORKFLOW_FILE}
+          # Custom unleash workflow created by ${{ github.repository_owner }}
+          storeScmRevision
+          checkProjectVersions
+          checkParentVersions
+          checkDependencies
+          checkPlugins
+          checkPluginDependencies
+          prepareVersions
+          checkAether
+          setReleaseVersions
+          addSpyPlugin
+          buildReleaseArtifacts
+          removeSpyPlugin
+          checkForScmChanges
+          tagScm
+          detectReleaseArtifacts
+          # Deploy here based on our project pom to ensure
+          # Sonatype ossrh staging is performed
+          # with the release version artifacts in place.
+          # Subsequent step "setDevVersion" will update the poms
+          # to the next SNAPSHOT version!
+          exec {
+            data=mvn -ntp -B deploy
+          }
+          setDevVersion
+          serializeMetadata
+          installArtifacts
+          # Disable default workflows deployment.
+          # This does not yet work to deploy to Maven Central.
+          #deployArtifacts
+          EOF
+          }
+          echo "##### BEGIN - ${UNLEASH_WORKFLOW_FILE}"
+          cat ${UNLEASH_WORKFLOW_FILE}
+          echo "##### END - ${UNLEASH_WORKFLOW_FILE}"
+          #
+          # -ntp Do not display transfer progress when downloading or uploading
+          # -B   Run in non-interactive (batch) mode (disables output color)
+          # -U   Forces a check for missing releases and updated snapshots on
+          # -e   Extended error logging
+          #
+          mvn -ntp -B -U -e \
+              unleash:perform \
+                -DenableLogTimestamps=true \
+                -Dunleash.releaseVersion=${{ inputs.releaseVersion }} \
+                -Dunleash.developmentVersion=${{ inputs.nextSnapshotVersion }} \
+                -Dunleash.allowLocalReleaseArtifacts=true \
+                -Dunleash.commitBeforeTagging=false \
+                -Dunleash.tagNamePattern=v@{project.version} \
+                -Dunleash.scmUsernameEnvVar=UNLEASH_SCM_USERNAME \
+                -Dunleash.scmPasswordEnvVar=UNLEASH_SCM_PASSWORD \
+                -Dunleash.scmMessagePrefix="[unleash-maven-plugin] ${{ inputs.releaseVersion }} ->  ${{ inputs.nextSnapshotVersion }}" \
+                -Dworkflow=${UNLEASH_WORKFLOW_FILE}
+          # not used:
+          #   -Dunleash.releaseArgs
+        env:
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
+          IS_SNAPSHOT_VERSION: false
+          # We do not want to release to Maven Central via this action!
+          # Releases shall be performed via unleash plugin only.
+          DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
+          UNLEASH_SCM_PASSWORD: ${{ github.token }}
+          UNLEASH_SCM_USERNAME: ${{ github.repository_owner }}
