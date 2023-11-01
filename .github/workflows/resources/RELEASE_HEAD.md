@@ -1,1 +1,1 @@
-mavenplugins/org-parent - Release Notes:
+mavenplugins/reusable-gh-actions - Release Notes:

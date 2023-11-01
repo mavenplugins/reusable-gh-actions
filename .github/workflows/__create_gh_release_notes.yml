@@ -44,7 +44,9 @@ jobs:
 
       - name: Prepare Release name
         run: |
-          echo "RELEASE_NAME=${{ github.repository }} ${{ env.VERSION_TAG }}" >> $GITHUB_ENV
+          OWNER_AND_REPO_NAME=${{ github.repository }}
+          REPO_NAME=${OWNER_AND_REPO_NAME#*/}
+          echo "RELEASE_NAME=${{ env.VERSION_TAG }} ${REPO_NAME}" >> $GITHUB_ENV
 
       - name: Log Environment
         run: |
