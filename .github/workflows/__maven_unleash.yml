@@ -58,10 +58,11 @@ jobs:
 
       - name: Log Environment
         run: |
-          echo "  runner:     ${{ inputs.runner }}"
-          echo "  workdir:    $(pwd)"
-          echo "  homedir:    ${HOME}"
-          echo "  github.ref: ${{ github.ref }}"
+          echo "  runner:            ${{ inputs.runner }}"
+          echo "  github.event_name: ${{ github.event_name }}"
+          echo "  workdir:           $(pwd)"
+          echo "  homedir:           ${HOME}"
+          echo "  github.ref:        ${{ github.ref }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
           echo "  releaseVersion:      ${{ inputs.releaseVersion }}"
           echo "  nextSnapshotVersion: ${{ inputs.nextSnapshotVersion }}"
@@ -77,10 +78,20 @@ jobs:
             exit 1
           fi
 
+      # We must check out before setup-java, since that one is looking for a pom.xml!
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # We need full history! - otherwise we end up in "missing commits" issue on unleash plugin
+          fetch-depth: 0
+
       - name: Set up Java for publishing to Maven Central Repository
         uses: mavenplugins/actions-setup-java@v3
         with:
-          java-version: 1.8
+          java-version: 8
+          distribution: temurin
+          # We prefer to get an empty local repo for any build
+          #cache: maven
           server-id: ossrh
           server-username: SONATYPE_USERNAME
           server-password: SONATYPE_PASSWORD
@@ -89,7 +100,10 @@ jobs:
 
       - name: Determine default installed Maven version
         id: default-maven
-        run: echo "maven-version=$(mvn -q -v)" >> $GITHUB_OUTPUT
+        run: |
+          DEFAULT_MAVEN_VERSION="$(mvn -q -v)"
+          echo "maven-version=${DEFAULT_MAVEN_VERSION}" >> $GITHUB_OUTPUT
+          echo "Default installed Maven version: ${DEFAULT_MAVEN_VERSION}"
 
       - name: Update Maven version if required
         uses: mavenplugins/actions-setup-maven@v4.5
@@ -109,18 +123,6 @@ jobs:
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_ENV
 
-      - name: List workdir content
-        run: |
-          echo "##### BEGIN - workdir"
-          ls -alR
-          echo "##### END - workdir"
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          # We need full history! - otherwise we end up in "missing commits" issue on unleash plugin
-          fetch-depth: 0
-        
       - name: Show Maven project version
         run: |
           MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)

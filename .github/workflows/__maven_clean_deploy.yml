@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         description: "If true, then snapshot project versions will be deployed only"
+      dryrun_release_deployment:
+        required: false
+        # Use string type to allow empty values
+        type: string
+        description: "If 'true', this will deploy to staging as the release version but not release to Maven Central."
 
     secrets:
       SONATYPE_USERNAME:
@@ -58,13 +63,24 @@ jobs:
           else
             echo "DEPLOY_SNAPSHOTS_ONLY=false" >> $GITHUB_ENV
           fi
+          if [[ "${{ inputs.dryrun_release_deployment }}" == "true" ]]; then
+            echo "DEPLOY_SNAPSHOTS_ONLY=false" >> $GITHUB_ENV
+            echo "DO_NOT_RELEASE_SONATYPE_STAGING=true" >> $GITHUB_ENV
+            echo "DRYRUN_RELEASE_DEPLOYMENT=true" >> $GITHUB_ENV
+          else
+            echo "DRYRUN_RELEASE_DEPLOYMENT=false" >> $GITHUB_ENV
+          fi
 
       - name: Log Environment
         run: |
-          echo "  runner:     ${{ inputs.runner }}"
-          echo "  github.ref: ${{ github.ref }}"
+          echo "  runner:            ${{ inputs.runner }}"
+          echo "  github.event_name: ${{ github.event_name }}"
+          echo "  github.ref:        ${{ github.ref }}"
+          echo "  workdir:           $(pwd)"
+          echo "  homedir:           ${HOME}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
-          echo "  env.DEPLOY_SNAPSHOTS_ONLY: ${{ env.DEPLOY_SNAPSHOTS_ONLY }}"
+          echo "  env.DEPLOY_SNAPSHOTS_ONLY:           ${{ env.DEPLOY_SNAPSHOTS_ONLY }}"
+          echo "  env.DRYRUN_RELEASE_DEPLOYMENT:       ${{ env.DRYRUN_RELEASE_DEPLOYMENT }}"
 
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -72,7 +88,10 @@ jobs:
       - name: Set up Java for publishing to Maven Central Repository
         uses: mavenplugins/actions-setup-java@v3
         with:
-          java-version: 1.8
+          java-version: 8
+          distribution: temurin
+          # We prefer to get an empty local repo for any build
+          #cache: maven
           server-id: ossrh
           server-username: SONATYPE_USERNAME
           server-password: SONATYPE_PASSWORD
@@ -81,7 +100,10 @@ jobs:
 
       - name: Determine default installed Maven version
         id: default-maven
-        run: echo "maven-version=$(mvn -q -v)" >> $GITHUB_OUTPUT
+        run: |
+          DEFAULT_MAVEN_VERSION="$(mvn -q -v)"
+          echo "maven-version=${DEFAULT_MAVEN_VERSION}" >> $GITHUB_OUTPUT
+          echo "Default installed Maven version: ${DEFAULT_MAVEN_VERSION}"
 
       - name: Update Maven version if required
         uses: mavenplugins/actions-setup-maven@v4.5
@@ -100,6 +122,56 @@ jobs:
           # Set step outputs:
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_ENV
+
+      - name: Enforce release version to dryrun a release deployment
+        if: env.DRYRUN_RELEASE_DEPLOYMENT == 'true'
+        run: |
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
+            MAVEN_PROJECT_RELEASE_VERSION="${MAVEN_PROJECT_VERSION%*-SNAPSHOT}"
+            echo "Locally update project version to release version: ${MAVEN_PROJECT_VERSION} -> ${MAVEN_PROJECT_RELEASE_VERSION}"
+            mvn -ntp -B versions:set -DnewVersion=${MAVEN_PROJECT_RELEASE_VERSION}
+            # Validate actual project version vs. expected
+            MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+            if [[ "${MAVEN_PROJECT_VERSION}" != "${MAVEN_PROJECT_RELEASE_VERSION}" ]]; then
+              echo "##### ERROR: Maven project version failed to update to release version"
+              exit 1
+            fi
+          fi
+
+      - name: Update a SNAPSHOT version if ref is not master or main branch
+        if: env.DRYRUN_RELEASE_DEPLOYMENT != 'true' && github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main'
+        run: |
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
+            # Determine version insert string
+            if [[ "${{ github.ref }}" == refs/heads/* ]]; then
+              # We are on a branch ref
+              BRANCH=${{ github.ref }}
+              # cut off the leading refs/heads
+              BRANCH=${BRANCH/refs\/heads\/}
+              # replace any / with _
+              VERSION_INSERT=${BRANCH//\//_}
+              # limit VERSION_INSERT to max. 40 last characters
+              VERSION_INSERT=$(_MAX_LEN=40 && [ ${#VERSION_INSERT} -gt ${_MAX_LEN} ] && echo ${VERSION_INSERT:0-${_MAX_LEN}} || echo ${VERSION_INSERT})
+            else
+              # Use short SHA as version insert
+              SHA=${{ github.sha }}
+              # Take first 7 digits as short sha
+              SHA_SHORT=${SHA::7}
+              VERSION_INSERT=${SHA_SHORT}
+            fi
+            # 1.0.0-SNAPSHOT -> 1.0.0-${VERSION_INSERT}-SNAPSHOT
+            MAVEN_PROJECT_DEVBRANCH_VERSION="${MAVEN_PROJECT_VERSION%*-SNAPSHOT}-${VERSION_INSERT}-SNAPSHOT"
+            echo "Locally update project version to dev branch version: ${MAVEN_PROJECT_VERSION} -> ${MAVEN_PROJECT_DEVBRANCH_VERSION}"
+            mvn -ntp -B versions:set -DnewVersion=${MAVEN_PROJECT_DEVBRANCH_VERSION}
+            # Validate actual project version vs. expected
+            MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+            if [[ "${MAVEN_PROJECT_VERSION}" != "${MAVEN_PROJECT_DEVBRANCH_VERSION}" ]]; then
+              echo "##### ERROR: Maven project version failed to update to dev branch version"
+              exit 1
+            fi
+          fi
 
       - name: Show Maven project version
         run: |
