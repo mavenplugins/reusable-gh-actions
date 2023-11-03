@@ -14,15 +14,12 @@ on:
   #push:
   #  branches:
   #    - master
-  #    - boards/cubietruck
   #schedule:
   #    - cron: 0 8 * * 5
 
 jobs:
-  job1_Call_Create_Github_Release_Notes:
-    name: Create Github Release Notes
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    #needs: job1_Build
+  job1_Call_Create_GitHub_Release_Notes:
+    name: Create GitHub Release Notes
     # Release creation requires write permission to contents
     permissions:
       contents: write
