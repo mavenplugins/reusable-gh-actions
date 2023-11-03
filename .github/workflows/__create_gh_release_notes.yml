@@ -124,7 +124,17 @@ jobs:
           #Create an empty README.md to make GHCICD/release-notes-from-changelog happy
           touch ${{ env.BUILD_DIR }}/README.md
           cp ./CHANGELOG.md ${{ env.BUILD_DIR }}/CHANGELOG.md
-          cp ./.github/workflows/resources/RELEASE_HEAD.md ${{ env.BUILD_DIR }}/RELEASE_HEAD.md
+          if [[ -f ./.github/workflows/resources/RELEASE_HEAD.md ]]; then
+            cp ./.github/workflows/resources/RELEASE_HEAD.md ${{ env.BUILD_DIR }}/RELEASE_HEAD.md
+          else
+            
+            {
+            # Note: subsequent lines til EOF marker must be left aligned to this "run:" level left border
+            cat <<EOF >${{ env.BUILD_DIR }}/RELEASE_HEAD.md
+          ## Release Notes - ${{ github.repository }}
+          EOF
+            }
+          fi
 
       # Create release notes by release-notes-from-changelog
       - name: Create release notes by GHCICD/release-notes-from-changelog@v1
