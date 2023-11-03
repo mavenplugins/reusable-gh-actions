@@ -10,15 +10,15 @@ on:
       runner:
         required: true
         type: string
-      release_staging_to_maven_central:
+      releaseToMavenCentral:
         required: false
         type: boolean
         description: "If true, then env.DO_NOT_RELEASE_SONATYPE_STAGING will be set to false"
       releaseVersion:
-        required: true
+        required: false
         type: string
       nextSnapshotVersion:
-        required: true
+        required: false
         type: string
 
     secrets:
@@ -34,13 +34,21 @@ on:
     outputs:
       MAVEN_VERSION:
         description: "The Maven version job1 was run on"
-        value: ${{ jobs.job1_Build_and_Deploy.outputs.MAVEN_VERSION }}
+        value: ${{ jobs.job1_Unleash_Project.outputs.MAVEN_VERSION }}
+      EFFECTIVE_RELEASE_VERSION:
+        description: "The release version having been applied"
+        value: ${{ jobs.job1_Unleash_Project.outputs.EFFECTIVE_RELEASE_VERSION }}
+      EFFECTIVE_NEXT_SNAPSHOT_VERSION:
+        description: "The next development version having been applied"
+        value: ${{ jobs.job1_Unleash_Project.outputs.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}
 
 jobs:
   job1_Unleash_Project:
     runs-on: ${{ inputs.runner }}
     outputs:
       MAVEN_VERSION: ${{ steps.show-maven-version.outputs.MAVEN_VERSION }}
+      EFFECTIVE_RELEASE_VERSION: ${{ steps.determine-unleash-versions.EFFECTIVE_RELEASE_VERSION }}
+      EFFECTIVE_NEXT_SNAPSHOT_VERSION: ${{ steps.determine-unleash-versions.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}
 
     strategy:
       matrix:
@@ -50,7 +58,7 @@ jobs:
     steps:
       - name: Propagate env from inputs
         run: |
-          if [[ "${{ inputs.release_staging_to_maven_central }}" == "true" ]]; then
+          if [[ "${{ inputs.releaseToMavenCentral }}" == "true" ]]; then
             echo "DO_NOT_RELEASE_SONATYPE_STAGING=false" >> $GITHUB_ENV
           else
             echo "DO_NOT_RELEASE_SONATYPE_STAGING=true" >> $GITHUB_ENV
@@ -64,19 +72,8 @@ jobs:
           echo "  homedir:           ${HOME}"
           echo "  github.ref:        ${{ github.ref }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
-          echo "  releaseVersion:      ${{ inputs.releaseVersion }}"
-          echo "  nextSnapshotVersion: ${{ inputs.nextSnapshotVersion }}"
-
-      - name: Validate input versions
-        run: |
-          if [[ "${{ inputs.releaseVersion }}" == *-SNAPSHOT ]]; then
-            echo "### ERROR: Illegal input - release version must NOT be a SNAPSHOT version!"
-            exit 1
-          fi
-          if [[ "${{ inputs.nextSnapshotVersion }}" != *-SNAPSHOT ]]; then
-            echo "### ERROR: Illegal input - next development version MUST be a SNAPSHOT version!"
-            exit 1
-          fi
+          echo "  inputs.releaseVersion:               ${{ inputs.releaseVersion }}"
+          echo "  inputs.nextSnapshotVersion:          ${{ inputs.nextSnapshotVersion }}"
 
       # We must check out before setup-java, since that one is looking for a pom.xml!
       - name: Checkout repo
@@ -126,15 +123,59 @@ jobs:
       - name: Show Maven project version
         run: |
           MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
-          #if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
-          #  IS_SNAPSHOT_VERSION=true
-          #else
-          #  IS_SNAPSHOT_VERSION=false
-          #fi
           echo "  MAVEN_PROJECT_VERSION: ${MAVEN_PROJECT_VERSION}"
-          #echo "  IS_SNAPSHOT_VERSION:   ${IS_SNAPSHOT_VERSION}"
           echo "MAVEN_PROJECT_VERSION=${MAVEN_PROJECT_VERSION}" >> $GITHUB_ENV
-          #echo "IS_SNAPSHOT_VERSION=${IS_SNAPSHOT_VERSION}" >> $GITHUB_ENV
+
+      - name: Determine effective release version and next dev version
+        id: determine-unleash-versions
+        run: |
+          if [[ -n "${{ inputs.releaseVersion }}" ]]; then
+            EFFECTIVE_RELEASE_VERSION="${{ inputs.releaseVersion }}"
+            echo "Effective release version taken from inputs.releaseVersion: ${EFFECTIVE_RELEASE_VERSION}"
+          else
+            EFFECTIVE_RELEASE_VERSION="${MAVEN_PROJECT_VERSION%*-SNAPSHOT}"
+            echo "Effective release version derived from project POM: ${EFFECTIVE_RELEASE_VERSION}"
+          fi
+          if [[ -n "${{ inputs.nextSnapshotVersion }}" ]]; then
+            EFFECTIVE_NEXT_SNAPSHOT_VERSION="${{ inputs.nextSnapshotVersion }}"
+            echo "Effective next SNAPSHOT version taken from inputs.nextSnapshotVersion: ${EFFECTIVE_NEXT_SNAPSHOT_VERSION}"
+          else
+            # Derive next snapshot version from EFFECTIVE_RELEASE_VERSION
+            if [[ ! "${EFFECTIVE_RELEASE_VERSION}" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
+              echo "### ERROR: EFFECTIVE_RELEASE_VERSION=${EFFECTIVE_RELEASE_VERSION} is not of format major[.minor[.incremental[.build]]]"
+              exit 1
+            fi
+            # Split release version parts into ARRAY
+            _IFS=$IFS && IFS='.' && read -r -a ARRAY <<< "${EFFECTIVE_RELEASE_VERSION}" && IFS=$_IFS
+            j=$((${#ARRAY[@]} - 1))
+            ARRAY[j]=$((ARRAY[$j] + 1))
+            EFFECTIVE_NEXT_SNAPSHOT_VERSION=""
+            for i in ${!ARRAY[@]}; do
+              EFFECTIVE_NEXT_SNAPSHOT_VERSION="${EFFECTIVE_NEXT_SNAPSHOT_VERSION}${ARRAY[$i]}"
+              [[ $i -lt $j ]] && EFFECTIVE_NEXT_SNAPSHOT_VERSION="${EFFECTIVE_NEXT_SNAPSHOT_VERSION}."
+            done
+            EFFECTIVE_NEXT_SNAPSHOT_VERSION="${EFFECTIVE_NEXT_SNAPSHOT_VERSION}-SNAPSHOT"
+            echo "Effective next SNAPSHOT version derived from effective release version: ${EFFECTIVE_NEXT_SNAPSHOT_VERSION}"
+          fi
+          # Log to build log
+          echo "  EFFECTIVE_RELEASE_VERSION:       ${EFFECTIVE_RELEASE_VERSION}"
+          echo "  EFFECTIVE_NEXT_SNAPSHOT_VERSION: ${EFFECTIVE_NEXT_SNAPSHOT_VERSION}"
+          # Export to step outputs and env
+          echo "EFFECTIVE_RELEASE_VERSION=${EFFECTIVE_RELEASE_VERSION}" >> $GITHUB_OUTPUT
+          echo "EFFECTIVE_RELEASE_VERSION=${EFFECTIVE_RELEASE_VERSION}" >> $GITHUB_ENV
+          echo "EFFECTIVE_NEXT_SNAPSHOT_VERSION=${EFFECTIVE_NEXT_SNAPSHOT_VERSION}" >> $GITHUB_OUTPUT
+          echo "EFFECTIVE_NEXT_SNAPSHOT_VERSION=${EFFECTIVE_NEXT_SNAPSHOT_VERSION}" >> $GITHUB_ENV
+
+      - name: Validate effective release and next dev version
+        run: |
+          if [[ "${{ env.EFFECTIVE_RELEASE_VERSION }}" == *-SNAPSHOT ]]; then
+            echo "### ERROR: Illegal release version - must NOT be a SNAPSHOT version!"
+            exit 1
+          fi
+          if [[ "${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}" != *-SNAPSHOT ]]; then
+            echo "### ERROR: Illegal next development version - MUST be a SNAPSHOT version!"
+            exit 1
+          fi
 
       - name: Unleash project
         run: |
@@ -145,10 +186,53 @@ jobs:
           mkdir -p ${UNLEASH_WORKFLOWS_DIR}
           UNLEASH_WORKFLOW_FILE=${UNLEASH_WORKFLOWS_DIR}/perform
           #
-          # Create custom workflow - the bash script inside the {} must be left aligned!
+          # Create custom workflow - the bash script inside the {} must be aligned to the left indent of this run: node!
           # This is the original default workflow with customization as commented below.
           {
-          cat <<EOF >${UNLEASH_WORKFLOW_FILE}
+            if [[ "${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}" == "true" ]]; then
+              #
+              # This is the DryRun workflow not actually releasing to Maven Central
+              #
+              cat <<EOF >${UNLEASH_WORKFLOW_FILE}
+          ####### BEGIN of unleash workflow #################################
+          # Custom unleash dry run workflow created by ${{ github.repository_owner }}
+          storeScmRevision
+          checkProjectVersions
+          checkParentVersions
+          checkDependencies
+          checkPlugins
+          checkPluginDependencies
+          prepareVersions
+          checkAether
+          setReleaseVersions
+          addSpyPlugin
+          buildReleaseArtifacts
+          removeSpyPlugin
+          #checkForScmChanges
+          #tagScm
+          #detectReleaseArtifacts
+          # Deploy here based on our project pom to ensure
+          # Sonatype ossrh staging is performed
+          # with the release version artifacts in place.
+          # Subsequent step "setDevVersion" will update the poms
+          # to the next SNAPSHOT version!
+          exec {
+            data=mvn -ntp -B deploy
+          }
+          #setDevVersion
+          #serializeMetadata
+          #installArtifacts
+          # Disable default workflows deployment.
+          # This does not yet work to deploy to Maven Central.
+          #deployArtifacts
+          ####### END of unleash workflow ###################################
+          EOF
+            else
+              #
+              # This is the release workflow actually releasing to Maven Central
+              #
+              cat <<EOF >${UNLEASH_WORKFLOW_FILE}
+          ####### BEGIN of unleash workflow #################################
           # Custom unleash workflow created by ${{ github.repository_owner }}
           storeScmRevision
           checkProjectVersions
@@ -177,9 +261,11 @@ jobs:
           serializeMetadata
           installArtifacts
           # Disable default workflows deployment.
-          # This does not yet work to deploy to Maven Central.
+          # This does not yet work to deploy to Maven Central via OSSRH staging!
           #deployArtifacts
+          ####### END of unleash workflow ###################################
           EOF
+            fi
           }
           echo "##### BEGIN - ${UNLEASH_WORKFLOW_FILE}"
           cat ${UNLEASH_WORKFLOW_FILE}
@@ -193,14 +279,14 @@ jobs:
           mvn -ntp -B -U -e \
               unleash:perform \
                 -DenableLogTimestamps=true \
-                -Dunleash.releaseVersion=${{ inputs.releaseVersion }} \
-                -Dunleash.developmentVersion=${{ inputs.nextSnapshotVersion }} \
+                -Dunleash.releaseVersion=${{ env.EFFECTIVE_RELEASE_VERSION }} \
+                -Dunleash.developmentVersion=${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }} \
                 -Dunleash.allowLocalReleaseArtifacts=true \
                 -Dunleash.commitBeforeTagging=false \
                 -Dunleash.tagNamePattern=v@{project.version} \
                 -Dunleash.scmUsernameEnvVar=UNLEASH_SCM_USERNAME \
                 -Dunleash.scmPasswordEnvVar=UNLEASH_SCM_PASSWORD \
-                -Dunleash.scmMessagePrefix="[unleash-maven-plugin] ${{ inputs.releaseVersion }} ->  ${{ inputs.nextSnapshotVersion }}" \
+                -Dunleash.scmMessagePrefix="[unleash-maven-plugin] ${{ env.EFFECTIVE_RELEASE_VERSION }} ->  ${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}" \
                 -Dworkflow=${UNLEASH_WORKFLOW_FILE}
           # not used:
           #   -Dunleash.releaseArgs
