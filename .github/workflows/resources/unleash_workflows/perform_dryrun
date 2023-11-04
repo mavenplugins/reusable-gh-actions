@@ -1,6 +1,6 @@
 ###################################################################
 #
-# Custom unleash dry run workflow adapted for mavenplugins GHA CICD
+# Custom unleash DryRun workflow adapted for mavenplugins GHA CICD
 #
 # Based on the original default perform workflow.
 # Modified as commented below.

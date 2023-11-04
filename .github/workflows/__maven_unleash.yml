@@ -10,16 +10,20 @@ on:
       runner:
         required: true
         type: string
-      releaseToMavenCentral:
-        required: false
-        type: boolean
-        description: "If true, then env.DO_NOT_RELEASE_SONATYPE_STAGING will be set to false"
       releaseVersion:
         required: false
         type: string
       nextSnapshotVersion:
         required: false
         type: string
+      releaseToMavenCentral:
+        required: false
+        type: boolean
+        description: "If true, then env.DO_NOT_RELEASE_SONATYPE_STAGING will be set to false. This will imply to run unleash plugin with actual release workflow."
+      enforceUnleashReleaseWorkflow:
+        required: false
+        type: boolean
+        description: "If true, the unleash plugin will perform the actual release workflow. Otherwise the dry run workflow will be performed - unless releaseToMavenCentral is set true!"
 
     secrets:
       OSSRH_USERNAME:
@@ -71,9 +75,10 @@ jobs:
           echo "  workdir:           $(pwd)"
           echo "  homedir:           ${HOME}"
           echo "  github.ref:        ${{ github.ref }}"
-          echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
-          echo "  inputs.releaseVersion:               ${{ inputs.releaseVersion }}"
-          echo "  inputs.nextSnapshotVersion:          ${{ inputs.nextSnapshotVersion }}"
+          echo "  inputs.releaseVersion:                ${{ inputs.releaseVersion }}"
+          echo "  inputs.nextSnapshotVersion:           ${{ inputs.nextSnapshotVersion }}"
+          echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING:  ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
+          echo "  inputs.enforceUnleashReleaseWorkflow: ${{ inputs.enforceUnleashReleaseWorkflow }}"
 
       # We must check out before setup-java, since that one is looking for a pom.xml!
       - name: Checkout repo
@@ -186,12 +191,12 @@ jobs:
           UNLEASH_WORKFLOWS_DIR=~/unleash_workflows
           mkdir -p ${UNLEASH_WORKFLOWS_DIR}
           UNLEASH_WORKFLOW_FILE=${UNLEASH_WORKFLOWS_DIR}/perform
-          if [[ "${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}" == "true" ]]; then
-            # Get DryRun workflow not actually releasing to Maven Central
-            curl "https://raw.githubusercontent.com/mavenplugins/reusable-gh-actions/master/.github/workflows/resources/unleash_workflows/perform_dryrun" -o "${UNLEASH_WORKFLOW_FILE}"
-          else
-            # Get release workflow actually releasing to Maven Central
+          if [[ "${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}" == "false" || "${{ inputs.enforceUnleashReleaseWorkflow }}" == "true" ]]; then
+            # Get unleash release workflow
             curl "https://raw.githubusercontent.com/mavenplugins/reusable-gh-actions/master/.github/workflows/resources/unleash_workflows/perform_release" -o "${UNLEASH_WORKFLOW_FILE}"
+          else
+            # Get unleash DryRun workflow
+            curl "https://raw.githubusercontent.com/mavenplugins/reusable-gh-actions/master/.github/workflows/resources/unleash_workflows/perform_dryrun" -o "${UNLEASH_WORKFLOW_FILE}"
           fi
           echo "##### BEGIN - ${UNLEASH_WORKFLOW_FILE}"
           cat ${UNLEASH_WORKFLOW_FILE}
