@@ -1,5 +1,8 @@
+#!/bin/bash
+#
 # Derive next snapshot version from EFFECTIVE_RELEASE_VERSION
-EFFECTIVE_RELEASE_VERSION=$1
+#
+EFFECTIVE_RELEASE_VERSION="$1"
 if [[ ! "${EFFECTIVE_RELEASE_VERSION}" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
   echo "### ERROR: EFFECTIVE_RELEASE_VERSION=${EFFECTIVE_RELEASE_VERSION} is not of format major[.minor[.incremental[.build]]]"
   exit 1

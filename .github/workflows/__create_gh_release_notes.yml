@@ -181,7 +181,7 @@ jobs:
       # Create release with info from CHANGELOG.md
       - name: Create GitHub release by ncipollo/release-action@v1
         id: create_release
-        uses: ncipollo/release-action@v1
+        uses: mavenplugins/actions-release-action@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ env.VERSION_TAG }}

@@ -25,9 +25,9 @@ on:
         description: "If 'true', this will deploy to staging as the release version but not release to Maven Central."
 
     secrets:
-      SONATYPE_USERNAME:
+      OSSRH_USERNAME:
         required: true
-      SONATYPE_PASSWORD:
+      OSSRH_PASSWORD:
         required: true
       OSSRH_GPG_SECRET_KEY:
         required: true
@@ -92,9 +92,10 @@ jobs:
           distribution: temurin
           # We prefer to get an empty local repo for any build
           #cache: maven
-          server-id: ossrh
-          server-username: SONATYPE_USERNAME
-          server-password: SONATYPE_PASSWORD
+          # server-id must comply with config in org-parent/pom.xml
+          server-id: organization_nexus
+          server-username: OSSRH_USERNAME
+          server-password: OSSRH_PASSWORD
           gpg-private-key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
           gpg-passphrase: OSSRH_GPG_PASSPHRASE
 
@@ -208,8 +209,8 @@ jobs:
           mvn -ntp -B \
               deploy
         env:
-          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
           IS_SNAPSHOT_VERSION: ${{ env.IS_SNAPSHOT_VERSION }}
           # We do not want to release to Maven Central via this action!
