@@ -1,0 +1,42 @@
+###################################################################
+#
+# Custom unleash release workflow adapted for mavenplugins GHA CICD
+#
+# Based on the original default perform workflow.
+# Modified as commented below.
+#
+storeScmRevision
+checkProjectVersions
+checkParentVersions
+checkDependencies
+checkPlugins
+checkPluginDependencies
+prepareVersions
+checkAether
+setReleaseVersions
+addSpyPlugin
+buildReleaseArtifacts
+removeSpyPlugin
+checkForScmChanges
+tagScm
+detectReleaseArtifacts
+#
+# Add custom deploy step here based on our projects
+# pom config to ensure Sonatype OSSRH staging is
+# performed with release version artifacts in place,
+# since step "setDevVersion" will update the poms
+# to next SNAPSHOT version!
+#
+exec {
+  data=mvn -ntp -B deploy
+}
+setDevVersion
+serializeMetadata
+installArtifacts
+#
+# Disable default workflows deployment.
+# This does not yet work to deploy to Maven Central via staging.
+#
+#deployArtifacts
+#
+###################################################################
