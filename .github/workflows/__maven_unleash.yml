@@ -114,7 +114,7 @@ jobs:
         with:
           maven-version: '${{ matrix.maven-version }}'
 
-      - name: Show Maven version and settings.xml
+      - name: Show Maven version, settings.xml and toolchains.xml
         id: show-maven-version
         run: |
           mvn --version
@@ -122,6 +122,9 @@ jobs:
           echo "##### BEGIN - settings.xml"
           cat ~/.m2/settings.xml
           echo "##### END - settings.xml"
+          echo "##### BEGIN - toolchains.xml"
+          cat ~/.m2/toolchains.xml
+          echo "##### END - toolchains.xml"
           # Set step outputs:
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_ENV
