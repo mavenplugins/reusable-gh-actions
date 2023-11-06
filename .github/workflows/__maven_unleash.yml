@@ -10,6 +10,10 @@ on:
       runner:
         required: true
         type: string
+      javaHomeVersion:
+        required: false
+        type: string
+        default: '8'
       releaseVersion:
         required: false
         type: string
@@ -70,11 +74,12 @@ jobs:
 
       - name: Log Environment
         run: |
-          echo "  runner:            ${{ inputs.runner }}"
-          echo "  github.event_name: ${{ github.event_name }}"
-          echo "  workdir:           $(pwd)"
-          echo "  homedir:           ${HOME}"
-          echo "  github.ref:        ${{ github.ref }}"
+          echo "  github.event_name:      ${{ github.event_name }}"
+          echo "  github.ref:             ${{ github.ref }}"
+          echo "  workdir:                $(pwd)"
+          echo "  homedir:                ${HOME}"
+          echo "  inputs.runner:          ${{ inputs.runner }}"
+          echo "  inputs.javaHomeVersion: ${{ inputs.javaHomeVersion }}"
           echo "  inputs.releaseVersion:                ${{ inputs.releaseVersion }}"
           echo "  inputs.nextSnapshotVersion:           ${{ inputs.nextSnapshotVersion }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING:  ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
@@ -87,11 +92,13 @@ jobs:
           # We need full history! - otherwise we end up in "missing commits" issue on unleash plugin
           fetch-depth: 0
 
-      - name: Set up Java for publishing to Maven Central Repository
+      # Setup JAVA home with Maven settings for publishing to Maven Central
+      - name: Setup JAVA home with Maven settings.xml
+        id: setup-java-home
         uses: mavenplugins/actions-setup-java@v3
         with:
-          java-version: 8
-          distribution: temurin
+          java-version: ${{ inputs.javaHomeVersion }}
+          distribution: zulu
           # We prefer to get an empty local repo for any build
           #cache: maven
           # server-id must comply with config in org-parent/pom.xml
@@ -114,9 +121,46 @@ jobs:
         with:
           maven-version: '${{ matrix.maven-version }}'
 
+      - name: Set environment for project, compile and toolchain version
+        run: |
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          MAVEN_COMPILER_TARGET=$(mvn -q -Dexpression=maven.compiler.target -DforceStdout help:evaluate)
+          MAVEN_TOOLCHAIN_VERSION="${MAVEN_COMPILER_TARGET:-${{ inputs.javaHomeVersion }}}"
+          # Strip off probable leading 1.
+          MAVEN_TOOLCHAIN_VERSION="${MAVEN_TOOLCHAIN_VERSION#1.*}"
+          echo "  MAVEN_PROJECT_VERSION:   ${MAVEN_PROJECT_VERSION}"
+          echo "  MAVEN_COMPILER_TARGET:   ${MAVEN_COMPILER_TARGET}"
+          echo "  MAVEN_TOOLCHAIN_VERSION: ${MAVEN_TOOLCHAIN_VERSION}"
+          echo "MAVEN_PROJECT_VERSION=${MAVEN_PROJECT_VERSION}" >> $GITHUB_ENV
+          echo "MAVEN_COMPILER_TARGET=${MAVEN_COMPILER_TARGET}" >> $GITHUB_ENV
+          echo "MAVEN_TOOLCHAIN_VERSION=${MAVEN_TOOLCHAIN_VERSION}" >> $GITHUB_ENV
+
+      - name: Preserve JAVA_HOME, PATH and settings.xml
+        run: |
+          echo "JAVA_HOME_PRESERVED=${JAVA_HOME}" >> $GITHUB_ENV
+          echo "PATH_PRESERVED=${PATH}" >> $GITHUB_ENV
+          cat ~/.m2/settings.xml > ~/.m2/settings.xml.preserved
+
+      - name: Add JAVA version for toolchain if required
+        id: add-java-for-toolchain
+        uses: mavenplugins/actions-setup-java@v3
+        if: env.MAVEN_TOOLCHAIN_VERSION != inputs.javaHomeVersion
+        with:
+          java-version: ${{ env.MAVEN_TOOLCHAIN_VERSION }}
+          distribution: zulu
+          
+      - name: Restore JAVA_HOME, PATH and settings.xml if required
+        if: env.JAVA_HOME != env.JAVA_HOME_PRESERVED
+        run: |
+          echo "JAVA_HOME=${JAVA_HOME_PRESERVED}" >> $GITHUB_ENV
+          echo "PATH=${PATH_PRESERVED}" >> $GITHUB_ENV
+          cat ~/.m2/settings.xml.preserved > ~/.m2/settings.xml
+
       - name: Show Maven version, settings.xml and toolchains.xml
         id: show-maven-version
         run: |
+          echo "PATH:      ${PATH}"
+          echo "JAVA_HOME: ${JAVA_HOME}"
           mvn --version
           echo "MAVEN_OPTS: ${MAVEN_OPTS}"
           echo "##### BEGIN - settings.xml"
@@ -128,12 +172,6 @@ jobs:
           # Set step outputs:
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
           echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_ENV
-
-      - name: Show Maven project version
-        run: |
-          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
-          echo "  MAVEN_PROJECT_VERSION: ${MAVEN_PROJECT_VERSION}"
-          echo "MAVEN_PROJECT_VERSION=${MAVEN_PROJECT_VERSION}" >> $GITHUB_ENV
 
       - name: Determine effective release version and next dev version
         id: determine-unleash-versions
