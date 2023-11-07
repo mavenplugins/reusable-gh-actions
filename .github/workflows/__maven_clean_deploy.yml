@@ -94,7 +94,7 @@ jobs:
       - name: Setup JAVA home with Maven settings.xml
         id: setup-java-home
         #uses: mavenplugins/actions-setup-java@v3
-        uses: mavenplugins/actions-setup-java@mhoffrog/552_allow_to_add_a_toolchain_only
+        uses: GHCICD/setup-java@v3-GHCICD-552
         with:
           java-version: ${{ inputs.javaHomeVersion }}
           distribution: zulu
@@ -191,28 +191,15 @@ jobs:
           echo "MAVEN_COMPILER_TARGET=${MAVEN_COMPILER_TARGET}" >> $GITHUB_ENV
           echo "MAVEN_TOOLCHAIN_VERSION=${MAVEN_TOOLCHAIN_VERSION}" >> $GITHUB_ENV
 
-      - name: Preserve JAVA_HOME, PATH and settings.xml
-        run: |
-          echo "JAVA_HOME_PRESERVED=${JAVA_HOME}" >> $GITHUB_ENV
-          echo "PATH_PRESERVED=${PATH}" >> $GITHUB_ENV
-          cat ~/.m2/settings.xml > ~/.m2/settings.xml.preserved
-
       - name: Add JAVA version for toolchain if required
         id: add-java-for-toolchain
         #uses: mavenplugins/actions-setup-java@v3
-        uses: mavenplugins/actions-setup-java@mhoffrog/552_allow_to_add_a_toolchain_only
+        uses: GHCICD/setup-java@v3-GHCICD-552
         if: env.MAVEN_TOOLCHAIN_VERSION != inputs.javaHomeVersion
         with:
           java-version: ${{ env.MAVEN_TOOLCHAIN_VERSION }}
           distribution: zulu
           update-toolchains-only: true
-
-      - name: Restore JAVA_HOME, PATH and settings.xml if required
-        if: env.JAVA_HOME != env.JAVA_HOME_PRESERVED
-        run: |
-          echo "JAVA_HOME=${JAVA_HOME_PRESERVED}" >> $GITHUB_ENV
-          echo "PATH=${PATH_PRESERVED}" >> $GITHUB_ENV
-          cat ~/.m2/settings.xml.preserved > ~/.m2/settings.xml
 
       - name: Show Maven version, settings.xml and toolchains.xml
         id: show-maven-version
