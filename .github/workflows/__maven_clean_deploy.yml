@@ -93,19 +93,16 @@ jobs:
       # Setup JAVA home with Maven settings for publishing to Maven Central
       - name: Setup JAVA home with Maven settings.xml
         id: setup-java-home
-        #uses: mavenplugins/actions-setup-java@v3
         uses: GHCICD/setup-java@v3-GHCICD-552
         with:
           java-version: ${{ inputs.javaHomeVersion }}
           distribution: zulu
           # We prefer to get an empty local repo for any build
           #cache: maven
-          # server-id must comply with config in org-parent/pom.xml
-          server-id: organization_nexus
-          server-username: OSSRH_USERNAME
-          server-password: OSSRH_PASSWORD
+          # Create private key here only.
+          # settings.xml with further gpg and sonatype authentication
+          # will be configured by step 'create-maven-settings' below.
           gpg-private-key: ${{ secrets.OSSRH_GPG_SECRET_KEY }}
-          gpg-passphrase: OSSRH_GPG_PASSPHRASE
 
       - name: Determine default installed Maven version
         id: default-maven
@@ -119,6 +116,44 @@ jobs:
         if: matrix.maven-version != steps.default-maven.outputs.maven-version
         with:
           maven-version: '${{ matrix.maven-version }}'
+
+      - name: Create Maven settings.xml
+        id: create-maven-settings
+        uses: mavenplugins/actions-maven-settings-action@v2.8.0
+        with:
+          # Override file created by step 'setup-java-home' above
+          override: true
+          sonatypeSnapshots: true
+          githubServer: false
+          # Note: server-id must comply with config in org-parent/pom.xml
+          servers: |
+            [{
+              "id": "organization_nexus",
+              "username": "${env.OSSRH_USERNAME}",
+              "password": "${env.OSSRH_PASSWORD}"
+             },
+             {
+              "id": "gpg.passphrase",
+              "passphrase": "${env.OSSRH_GPG_PASSPHRASE}",
+              "configuration": {}
+             }]
+
+      - name: Show initial Maven setup result
+        run: |
+          echo "PATH:      ${PATH}"
+          echo "JAVA_HOME: ${JAVA_HOME}"
+          mvn --version
+          echo "MAVEN_OPTS: ${MAVEN_OPTS}"
+          echo "##### BEGIN - settings.xml"
+          cat ~/.m2/settings.xml
+          echo "##### END - settings.xml"
+          echo "##### BEGIN - toolchains.xml"
+          cat ~/.m2/toolchains.xml
+          echo "##### END - toolchains.xml"
+
+      - name: Validate Maven running properly with project POM
+        run: |
+          mvn -ntp -B -Dexpression=project.version -DforceStdout help:evaluate
 
       - name: Enforce release version to dryrun a release deployment
         if: env.DRYRUN_RELEASE_DEPLOYMENT == 'true'
@@ -150,7 +185,7 @@ jobs:
               # replace any / with _
               VERSION_INSERT=${BRANCH//\//_}
               # limit VERSION_INSERT to max. 40 last characters
-              VERSION_INSERT=$(_MAX_LEN=40 && [ ${#VERSION_INSERT} -gt ${_MAX_LEN} ] && echo ${VERSION_INSERT:0-${_MAX_LEN}} || echo ${VERSION_INSERT})
+              VERSION_INSERT=$(_MAX_LEN=40 && [[ ${#VERSION_INSERT} -gt ${_MAX_LEN} ]] && echo "${VERSION_INSERT:0-${_MAX_LEN}}" || echo "${VERSION_INSERT}")
             else
               # Use short SHA as version insert
               SHA=${{ github.sha }}
@@ -193,7 +228,6 @@ jobs:
 
       - name: Add JAVA version for toolchain if required
         id: add-java-for-toolchain
-        #uses: mavenplugins/actions-setup-java@v3
         uses: GHCICD/setup-java@v3-GHCICD-552
         if: env.MAVEN_TOOLCHAIN_VERSION != inputs.javaHomeVersion
         with:
