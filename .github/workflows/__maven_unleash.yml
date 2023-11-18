@@ -294,5 +294,7 @@ jobs:
           # We do not want to release to Maven Central via this action!
           # Releases shall be performed via unleash plugin only.
           DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
-          UNLEASH_SCM_PASSWORD: ${{ github.token }}
-          UNLEASH_SCM_USERNAME: ${{ github.repository_owner }}
+          #UNLEASH_SCM_PASSWORD: ${{ github.token }}
+          #UNLEASH_SCM_USERNAME: ${{ github.repository_owner }}
+          UNLEASH_SCM_PASSWORD: ${{ secrets.SERVICE_USER_PAT }}
+          UNLEASH_SCM_USERNAME: ${{ secrets.SERVICE_USER_NAME }}
