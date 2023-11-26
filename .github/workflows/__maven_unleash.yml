@@ -278,7 +278,7 @@ jobs:
                 -Dunleash.releaseVersion=${{ env.EFFECTIVE_RELEASE_VERSION }} \
                 -Dunleash.developmentVersion=${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }} \
                 -Dunleash.allowLocalReleaseArtifacts=true \
-                -Dunleash.commitBeforeTagging=false \
+                -Dunleash.commitBeforeTagging=true \
                 -Dunleash.tagNamePattern=v@{project.version} \
                 -Dunleash.scmUsernameEnvVar=UNLEASH_SCM_USERNAME \
                 -Dunleash.scmPasswordEnvVar=UNLEASH_SCM_PASSWORD \
