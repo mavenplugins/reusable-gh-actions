@@ -114,7 +114,7 @@ jobs:
           echo "Default installed Maven version: ${DEFAULT_MAVEN_VERSION}"
 
       - name: Update Maven version if required
-        uses: mavenplugins/actions-setup-maven@v4.5
+        uses: mavenplugins/actions-setup-maven@vHEAD
         if: matrix.maven-version != steps.default-maven.outputs.maven-version
         with:
           maven-version: '${{ matrix.maven-version }}'
