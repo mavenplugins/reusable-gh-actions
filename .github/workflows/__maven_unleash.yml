@@ -27,7 +27,11 @@ on:
       enforceUnleashReleaseWorkflow:
         required: false
         type: boolean
-        description: "If true, the unleash plugin will perform the actual release workflow. Otherwise the dry run workflow will be performed - unless releaseToMavenCentral is set true!"
+        description: "If true, then the unleash plugin will perform the actual release workflow. Otherwise the dry run workflow will be performed - unless releaseToMavenCentral is set true!"
+      unleashWorkflowURL:
+        required: false
+        type: string
+        description: "If not blank, then the unleash plugin will perform this workflow. This implies that releaseToMavenCentral and enforceUnleashReleaseWorkflow will be ignored and env.DO_NOT_RELEASE_SONATYPE_STAGING is set true!"
 
     secrets:
       OSSRH_USERNAME:
@@ -66,10 +70,21 @@ jobs:
     steps:
       - name: Propagate env from inputs
         run: |
-          if [[ "${{ inputs.releaseToMavenCentral }}" == "true" ]]; then
-            echo "DO_NOT_RELEASE_SONATYPE_STAGING=false" >> $GITHUB_ENV
+          if [[ "${{ inputs.releaseToMavenCentral }}" == "true" && -z "${{ inputs.unleashWorkflowURL }}" ]]; then
+            DO_NOT_RELEASE_SONATYPE_STAGING=false
           else
-            echo "DO_NOT_RELEASE_SONATYPE_STAGING=true" >> $GITHUB_ENV
+            DO_NOT_RELEASE_SONATYPE_STAGING=true
+          fi
+          echo "DO_NOT_RELEASE_SONATYPE_STAGING=${DO_NOT_RELEASE_SONATYPE_STAGING}" >> $GITHUB_ENV
+          if [[ -n "${{ inputs.unleashWorkflowURL }}" ]]; then
+            # Use specific workflow
+            echo "UNLEASH_WORKFLOW_URL=${{ inputs.unleashWorkflowURL }}" >> $GITHUB_ENV
+          elif [[ "${DO_NOT_RELEASE_SONATYPE_STAGING}" == "false" || "${{ inputs.enforceUnleashReleaseWorkflow }}" == "true" ]]; then
+            # Use unleash release workflow
+            echo "UNLEASH_WORKFLOW_URL=https://raw.githubusercontent.com/mavenplugins/reusable-gh-actions/master/.github/workflows/resources/unleash_workflows/perform_release" >> $GITHUB_ENV
+          else
+            # Use unleash DryRun workflow
+            echo "UNLEASH_WORKFLOW_URL=https://raw.githubusercontent.com/mavenplugins/reusable-gh-actions/master/.github/workflows/resources/unleash_workflows/perform_dryrun" >> $GITHUB_ENV
           fi
 
       - name: Log Environment
@@ -83,7 +98,7 @@ jobs:
           echo "  inputs.releaseVersion:                ${{ inputs.releaseVersion }}"
           echo "  inputs.nextSnapshotVersion:           ${{ inputs.nextSnapshotVersion }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING:  ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
-          echo "  inputs.enforceUnleashReleaseWorkflow: ${{ inputs.enforceUnleashReleaseWorkflow }}"
+          echo "  env.UNLEASH_WORKFLOW_URL: ${{ env.UNLEASH_WORKFLOW_URL }}"
 
       # We must check out before setup-java, since that one is looking for a pom.xml!
       - name: Checkout repo
@@ -256,13 +271,7 @@ jobs:
           UNLEASH_WORKFLOWS_DIR=~/unleash_workflows
           mkdir -p ${UNLEASH_WORKFLOWS_DIR}
           UNLEASH_WORKFLOW_FILE=${UNLEASH_WORKFLOWS_DIR}/perform
-          if [[ "${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}" == "false" || "${{ inputs.enforceUnleashReleaseWorkflow }}" == "true" ]]; then
-            # Get unleash release workflow
-            curl "https://raw.githubusercontent.com/mavenplugins/reusable-gh-actions/master/.github/workflows/resources/unleash_workflows/perform_release" -o "${UNLEASH_WORKFLOW_FILE}"
-          else
-            # Get unleash DryRun workflow
-            curl "https://raw.githubusercontent.com/mavenplugins/reusable-gh-actions/master/.github/workflows/resources/unleash_workflows/perform_dryrun" -o "${UNLEASH_WORKFLOW_FILE}"
-          fi
+          curl "${{ env.UNLEASH_WORKFLOW_URL }}" -o "${UNLEASH_WORKFLOW_FILE}"
           echo "##### BEGIN - ${UNLEASH_WORKFLOW_FILE}"
           cat ${UNLEASH_WORKFLOW_FILE}
           echo "##### END - ${UNLEASH_WORKFLOW_FILE}"
