@@ -106,6 +106,9 @@ jobs:
         with:
           # We need full history! - otherwise we end up in "missing commits" issue on unleash plugin
           fetch-depth: 0
+          # Explicitly provide the ref path rather than using the original triggering SHA,
+          # since that might have changed by particular jobs in multi job scenarios
+          ref: ${{ github.ref }}
 
       # Setup JAVA home with Maven settings for publishing to Maven Central
       - name: Setup JAVA home with Maven settings.xml
