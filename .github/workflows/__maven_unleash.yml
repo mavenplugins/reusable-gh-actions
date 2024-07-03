@@ -32,6 +32,16 @@ on:
         required: false
         type: string
         description: "If not blank, then the unleash plugin will perform this workflow. This implies that releaseToMavenCentral and enforceUnleashReleaseWorkflow will be ignored and env.DO_NOT_RELEASE_SONATYPE_STAGING is set true!"
+      mavenOpts:
+        required: false
+        type: string
+        description: "Additional Maven options for the mvn commandline"
+        default: ''
+      mavenVersion:
+        required: false
+        type: string
+        description: "Maven version to be used"
+        default: '3.8.3'
 
     secrets:
       OSSRH_USERNAME:
@@ -62,10 +72,10 @@ jobs:
       EFFECTIVE_RELEASE_VERSION: ${{ steps.determine-unleash-versions.EFFECTIVE_RELEASE_VERSION }}
       EFFECTIVE_NEXT_SNAPSHOT_VERSION: ${{ steps.determine-unleash-versions.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}
 
-    strategy:
-      matrix:
-        #maven-version: [ '3.8.3', '3.9.4' ]
-        maven-version: [ '3.8.3' ]
+    #strategy:
+    #  matrix:
+    #    #maven-version: [ '3.8.3', '3.9.4' ]
+    #    maven-version: [ '3.8.3' ]
 
     steps:
       - name: Propagate env from inputs
@@ -95,6 +105,8 @@ jobs:
           echo "  homedir:                ${HOME}"
           echo "  inputs.runner:          ${{ inputs.runner }}"
           echo "  inputs.javaHomeVersion: ${{ inputs.javaHomeVersion }}"
+          echo "  inputs.mavenVersion:    ${{ inputs.mavenVersion }}"
+          echo "  inputs.mavenOpts:       ${{ inputs.mavenOpts }}"
           echo "  inputs.releaseVersion:                ${{ inputs.releaseVersion }}"
           echo "  inputs.nextSnapshotVersion:           ${{ inputs.nextSnapshotVersion }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING:  ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
@@ -133,9 +145,9 @@ jobs:
 
       - name: Update Maven version if required
         uses: mavenplugins/actions-setup-maven@vHEAD
-        if: matrix.maven-version != steps.default-maven.outputs.maven-version
+        if: inputs.mavenVersion != steps.default-maven.outputs.maven-version
         with:
-          maven-version: '${{ matrix.maven-version }}'
+          maven-version: '${{ inputs.mavenVersion }}'
 
       - name: Create Maven settings.xml
         id: create-maven-settings
@@ -212,8 +224,8 @@ jobs:
           cat ~/.m2/toolchains.xml
           echo "##### END - toolchains.xml"
           # Set step outputs:
-          echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
-          echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_ENV
+          echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_OUTPUT
+          echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_ENV
 
       - name: Determine effective release version and next dev version
         id: determine-unleash-versions
@@ -295,7 +307,7 @@ jobs:
                 -Dunleash.scmUsernameEnvVar=UNLEASH_SCM_USERNAME \
                 -Dunleash.scmPasswordEnvVar=UNLEASH_SCM_PASSWORD \
                 -Dunleash.scmMessagePrefix="[unleash-maven-plugin] ${{ env.EFFECTIVE_RELEASE_VERSION }} ->  ${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}" \
-                -Dworkflow=${UNLEASH_WORKFLOW_FILE}
+                -Dworkflow=${UNLEASH_WORKFLOW_FILE} ${{ inputs.mavenOpts }}
           # not used:
           #   -Dunleash.releaseArgs
         env:
