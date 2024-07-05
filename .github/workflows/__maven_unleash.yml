@@ -290,6 +290,13 @@ jobs:
           echo "##### BEGIN - ${UNLEASH_WORKFLOW_FILE}"
           cat ${UNLEASH_WORKFLOW_FILE}
           echo "##### END - ${UNLEASH_WORKFLOW_FILE}"
+          UNLEASH_CMDLINE_GOAL=$(mvn -q -Dexpression=unleash.cmdline.goal -DforceStdout help:evaluate)
+          if [[ -z "${UNLEASH_CMDLINE_GOAL}" || "${UNLEASH_CMDLINE_GOAL}" == null* ]]; then
+            UNLEASH_CMDLINE_GOAL="unleash:perform"
+          else
+            echo "### INFO: unleash.cmdline.goal defined by POM"
+          fi
+          echo "  UNLEASH_CMDLINE_GOAL: ${UNLEASH_CMDLINE_GOAL}"
           #
           # -ntp Do not display transfer progress when downloading or uploading
           # -B   Run in non-interactive (batch) mode (disables output color)
@@ -297,7 +304,7 @@ jobs:
           # -e   Extended error logging
           #
           mvn -ntp -B -U -e \
-              unleash:perform \
+              ${UNLEASH_CMDLINE_GOAL} \
                 -DenableLogTimestamps=true \
                 -Dunleash.releaseVersion=${{ env.EFFECTIVE_RELEASE_VERSION }} \
                 -Dunleash.developmentVersion=${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }} \
