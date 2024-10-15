@@ -179,7 +179,14 @@ jobs:
             MVN_NTP_OPTION=""
             echo "  => -ntp commandline option is NOT available!"
           fi
+          if [[ $(semver2int "${EFFECTIVE_MAVEN_VERSION}") -lt $(semver2int "3.6.3") ]]; then
+            MVN_HELP_VERSION_OPTION="-Dversion.maven-help-plugin=3.3.0"
+            echo "  => MVN_HELP_VERSION_OPTION=${MVN_HELP_VERSION_OPTION}!"
+          else
+            MVN_HELP_VERSION_OPTION=""
+          fi
           echo "MVN_NTP_OPTION=${MVN_NTP_OPTION}" >> $GITHUB_ENV
+          echo "MVN_HELP_VERSION_OPTION=${MVN_HELP_VERSION_OPTION}" >> $GITHUB_ENV
 
       - name: Create Maven settings.xml
         id: create-maven-settings
@@ -217,12 +224,12 @@ jobs:
 
       - name: Validate Maven running properly with project POM
         run: |
-          mvn ${{ env.MVN_NTP_OPTION }} -B -Dexpression=project.version -DforceStdout help:evaluate
+          mvn ${{ env.MVN_NTP_OPTION }} -B -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate
 
       - name: Set environment for project, compile and toolchain version
         run: |
-          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
-          MAVEN_COMPILER_TARGET=$(mvn -q -Dexpression=maven.compiler.target -DforceStdout help:evaluate)
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
+          MAVEN_COMPILER_TARGET=$(mvn -q -Dexpression=maven.compiler.target -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_COMPILER_TARGET:-${{ inputs.javaHomeVersion }}}"
           # Strip off probable leading 1.
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_TOOLCHAIN_VERSION#1.*}"
@@ -322,7 +329,7 @@ jobs:
           echo "##### BEGIN - ${UNLEASH_WORKFLOW_FILE}"
           cat ${UNLEASH_WORKFLOW_FILE}
           echo "##### END - ${UNLEASH_WORKFLOW_FILE}"
-          UNLEASH_CMDLINE_GOAL=$(mvn -q -Dexpression=unleash.cmdline.goal -DforceStdout help:evaluate)
+          UNLEASH_CMDLINE_GOAL=$(mvn -q -Dexpression=unleash.cmdline.goal -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           if [[ -z "${UNLEASH_CMDLINE_GOAL}" || "${UNLEASH_CMDLINE_GOAL}" == null* ]]; then
             UNLEASH_CMDLINE_GOAL="unleash:perform"
           else
