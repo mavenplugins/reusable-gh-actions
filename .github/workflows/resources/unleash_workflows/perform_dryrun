@@ -31,7 +31,7 @@ removeSpyPlugin
 # to next SNAPSHOT version!
 #
 exec {
-  data=mvn -ntp -B deploy
+  data=mvn @{env.MVN_NTP_OPTION} -B deploy
 }
 #
 # Skip default workflow steps since of dry run

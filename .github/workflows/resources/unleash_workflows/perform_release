@@ -28,7 +28,7 @@ detectReleaseArtifacts
 # to next SNAPSHOT version!
 #
 exec {
-  data=mvn -ntp -B deploy
+  data=mvn @{env.MVN_NTP_OPTION} -B deploy
 }
 setDevVersion
 serializeMetadata

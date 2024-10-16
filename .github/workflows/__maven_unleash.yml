@@ -342,7 +342,7 @@ jobs:
           # -U   Forces a check for missing releases and updated snapshots on
           # -e   Extended error logging
           #
-          mvn ${{ env.MVN_NTP_OPTION }} -B -U -e \
+          mvn ${MVN_NTP_OPTION} -B -U -e \
               ${UNLEASH_CMDLINE_GOAL} \
                 -DenableLogTimestamps=true \
                 -Dunleash.releaseVersion=${{ env.EFFECTIVE_RELEASE_VERSION }} \
@@ -361,6 +361,7 @@ jobs:
           OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
           IS_SNAPSHOT_VERSION: false
+          MVN_NTP_OPTION: ${{ env.MVN_NTP_OPTION }}
           # We do not want to release to Maven Central via this action!
           # Releases shall be performed via unleash plugin only.
           DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
