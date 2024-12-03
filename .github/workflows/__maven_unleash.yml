@@ -52,6 +52,8 @@ on:
         required: true
       OSSRH_GPG_PASSPHRASE:
         required: true
+      TEST_REPO_KEY_PASSPHRASE:
+        required: true
 
     outputs:
       MAVEN_VERSION:
@@ -369,3 +371,4 @@ jobs:
           #UNLEASH_SCM_USERNAME: ${{ github.repository_owner }}
           UNLEASH_SCM_PASSWORD: ${{ secrets.SERVICE_USER_PAT }}
           UNLEASH_SCM_USERNAME: ${{ secrets.SERVICE_USER_NAME }}
+          TEST_REPO_KEY_PASSPHRASE: ${{ secrets.TEST_REPO_KEY_PASSPHRASE }}

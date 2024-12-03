@@ -37,6 +37,8 @@ on:
         required: true
       OSSRH_GPG_PASSPHRASE:
         required: true
+      TEST_REPO_KEY_PASSPHRASE:
+        required: true
 
     outputs:
       MAVEN_VERSION:
@@ -265,6 +267,7 @@ jobs:
           # We do not want to release to Maven Central via this action!
           # Releases shall be performed via unleash plugin only.
           DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
+          TEST_REPO_KEY_PASSPHRASE: ${{ secrets.TEST_REPO_KEY_PASSPHRASE }}
 
       - name: Publish to Sonatype and/or Maven Central Repo
         if: env.IS_SNAPSHOT_VERSION == 'true' || env.DEPLOY_SNAPSHOTS_ONLY == 'false'
@@ -281,3 +284,4 @@ jobs:
           # We do not want to release to Maven Central via this action!
           # Releases shall be performed via unleash plugin only.
           DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
+          TEST_REPO_KEY_PASSPHRASE: ${{ secrets.TEST_REPO_KEY_PASSPHRASE }}
