@@ -14,6 +14,11 @@ on:
         required: false
         type: string
         default: '8'
+      mavenVersion:
+        required: false
+        type: string
+        description: "Maven version to be used"
+        default: '3.8.3'
       release_staging_to_maven_central:
         required: false
         type: boolean
@@ -51,10 +56,10 @@ jobs:
     outputs:
       MAVEN_VERSION: ${{ steps.show-maven-version.outputs.MAVEN_VERSION }}
 
-    strategy:
-      matrix:
-        #maven-version: [ '3.8.3', '3.9.4' ]
-        maven-version: [ '3.8.3' ]
+    #strategy:
+    #  matrix:
+    #    #maven-version: [ '3.8.3', '3.9.4' ]
+    #    maven-version: [ '3.8.3' ]
 
     steps:
       - name: Propagate env from inputs
@@ -85,6 +90,7 @@ jobs:
           echo "  homedir:                ${HOME}"
           echo "  inputs.runner:          ${{ inputs.runner }}"
           echo "  inputs.javaHomeVersion: ${{ inputs.javaHomeVersion }}"
+          echo "  inputs.mavenVersion:    ${{ inputs.mavenVersion }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
           echo "  env.DEPLOY_SNAPSHOTS_ONLY:           ${{ env.DEPLOY_SNAPSHOTS_ONLY }}"
           echo "  env.DRYRUN_RELEASE_DEPLOYMENT:       ${{ env.DRYRUN_RELEASE_DEPLOYMENT }}"
@@ -115,9 +121,48 @@ jobs:
 
       - name: Update Maven version if required
         uses: mavenplugins/actions-setup-maven@vHEAD
-        if: matrix.maven-version != steps.default-maven.outputs.maven-version
+        if: inputs.mavenVersion != steps.default-maven.outputs.maven-version
         with:
-          maven-version: '${{ matrix.maven-version }}'
+          maven-version: '${{ inputs.mavenVersion }}'
+
+      - name: Determine Maven version related cmd options
+        id: maven-cmd-options
+        run: |
+          # Helper function to convert semver version to int value for comparison
+          # Convert an up to 4 digit semversion i.j.k.l with up to 3 digits each part to
+          # an integer value.
+          #
+          # Inspired by: https://stackoverflow.com/a/37939589/15763374
+          #
+          # Usage:
+          #   if [ $(semver2int $VAR) -ge $(semver2int "6.2.0") ]; then
+          #     echo "Version is up to date"
+          #   fi
+          #
+          semver2int() {
+            if [[ -n "$1" && ! "$1" =~ ^[0-9]+(\.[0-9]{1,3}){0,3}$ ]]; then
+              echo "##### $0: '$1' is an invalid version for this script! It must be up to 4 numeric parts separated by '.' and up to 3 digits for each part!" >&2
+              exit 1
+            fi
+            echo "$1" | awk -F. '{ printf("%d%03d%03d%03d\n", $1,$2,$3,$4); }'
+          }
+          EFFECTIVE_MAVEN_VERSION="$(mvn -q -v)"
+          echo "Effective installed Maven version: ${EFFECTIVE_MAVEN_VERSION}"
+          if [[ $(semver2int "${EFFECTIVE_MAVEN_VERSION}") -ge $(semver2int "3.6.1") ]]; then
+            MVN_NTP_OPTION="-ntp"
+            echo "  => -ntp commandline option is available!"
+          else
+            MVN_NTP_OPTION=""
+            echo "  => -ntp commandline option is NOT available!"
+          fi
+          if [[ $(semver2int "${EFFECTIVE_MAVEN_VERSION}") -lt $(semver2int "3.6.3") ]]; then
+            MVN_HELP_VERSION_OPTION="-Dversion.maven-help-plugin=3.3.0"
+            echo "  => MVN_HELP_VERSION_OPTION=${MVN_HELP_VERSION_OPTION}!"
+          else
+            MVN_HELP_VERSION_OPTION=""
+          fi
+          echo "MVN_NTP_OPTION=${MVN_NTP_OPTION}" >> $GITHUB_ENV
+          echo "MVN_HELP_VERSION_OPTION=${MVN_HELP_VERSION_OPTION}" >> $GITHUB_ENV
 
       - name: Create Maven settings.xml
         id: create-maven-settings
@@ -155,18 +200,18 @@ jobs:
 
       - name: Validate Maven running properly with project POM
         run: |
-          mvn -ntp -B -Dexpression=project.version -DforceStdout help:evaluate
+          mvn ${{ env.MVN_NTP_OPTION }} -B -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate
 
       - name: Enforce release version to dryrun a release deployment
         if: env.DRYRUN_RELEASE_DEPLOYMENT == 'true'
         run: |
-          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
             MAVEN_PROJECT_RELEASE_VERSION="${MAVEN_PROJECT_VERSION%*-SNAPSHOT}"
             echo "Locally update project version to release version: ${MAVEN_PROJECT_VERSION} -> ${MAVEN_PROJECT_RELEASE_VERSION}"
-            mvn -ntp -B versions:set -DnewVersion=${MAVEN_PROJECT_RELEASE_VERSION}
+            mvn ${{ env.MVN_NTP_OPTION }} -B versions:set -DnewVersion=${MAVEN_PROJECT_RELEASE_VERSION}
             # Validate actual project version vs. expected
-            MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+            MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
             if [[ "${MAVEN_PROJECT_VERSION}" != "${MAVEN_PROJECT_RELEASE_VERSION}" ]]; then
               echo "##### ERROR: Maven project version failed to update to release version"
               exit 1
@@ -176,7 +221,7 @@ jobs:
       - name: Update a SNAPSHOT version if ref is not master or main branch
         if: env.DRYRUN_RELEASE_DEPLOYMENT != 'true' && github.ref != 'refs/heads/master' && github.ref != 'refs/heads/main'
         run: |
-          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
             # Determine version insert string
             if [[ "${{ github.ref }}" == refs/heads/* ]]; then
@@ -198,9 +243,9 @@ jobs:
             # 1.0.0-SNAPSHOT -> 1.0.0-${VERSION_INSERT}-SNAPSHOT
             MAVEN_PROJECT_DEVBRANCH_VERSION="${MAVEN_PROJECT_VERSION%*-SNAPSHOT}-${VERSION_INSERT}-SNAPSHOT"
             echo "Locally update project version to dev branch version: ${MAVEN_PROJECT_VERSION} -> ${MAVEN_PROJECT_DEVBRANCH_VERSION}"
-            mvn -ntp -B versions:set -DnewVersion=${MAVEN_PROJECT_DEVBRANCH_VERSION}
+            mvn ${{ env.MVN_NTP_OPTION }} -B versions:set -DnewVersion=${MAVEN_PROJECT_DEVBRANCH_VERSION}
             # Validate actual project version vs. expected
-            MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+            MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
             if [[ "${MAVEN_PROJECT_VERSION}" != "${MAVEN_PROJECT_DEVBRANCH_VERSION}" ]]; then
               echo "##### ERROR: Maven project version failed to update to dev branch version"
               exit 1
@@ -209,13 +254,13 @@ jobs:
 
       - name: Set environment for project, compile and toolchain version
         run: |
-          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout help:evaluate)
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
             IS_SNAPSHOT_VERSION=true
           else
             IS_SNAPSHOT_VERSION=false
           fi
-          MAVEN_COMPILER_TARGET=$(mvn -q -Dexpression=maven.compiler.target -DforceStdout help:evaluate)
+          MAVEN_COMPILER_TARGET=$(mvn -q -Dexpression=maven.compiler.target -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_COMPILER_TARGET:-${{ inputs.javaHomeVersion }}}"
           # Strip off probable leading 1.
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_TOOLCHAIN_VERSION#1.*}"
@@ -251,15 +296,15 @@ jobs:
           cat ~/.m2/toolchains.xml
           echo "##### END - toolchains.xml"
           # Set step outputs:
-          echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_OUTPUT
-          echo "MAVEN_VERSION=${{ matrix.maven-version }}" >> $GITHUB_ENV
+          echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_OUTPUT
+          echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_ENV
 
       - name: Build and package artifacts
         run: |
           # -ntp Do not display transfer progress when downloading or uploading
           # -B   Run in non-interactive (batch) mode (disables output color)
           # -U   Forces a check for missing releases and updated snapshots on
-          mvn -ntp -B -U \
+          mvn ${{ env.MVN_NTP_OPTION }} -B -U \
               clean package
         env:
           OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
@@ -274,7 +319,7 @@ jobs:
         run: |
           # -ntp Do not display transfer progress when downloading or uploading
           # -B   Run in non-interactive (batch) mode (disables output color)
-          mvn -ntp -B \
+          mvn ${{ env.MVN_NTP_OPTION }} -B \
               deploy
         env:
           OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
