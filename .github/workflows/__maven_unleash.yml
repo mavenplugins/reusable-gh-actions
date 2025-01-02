@@ -319,6 +319,25 @@ jobs:
             exit 1
           fi
 
+      - name: Log Action Summary
+        run: |
+          MD_CODE='```'
+          cat << END_OF_SUMMARY | tee -a ${GITHUB_STEP_SUMMARY}
+          ## Job Filter Summary
+          ${MD_CODE}
+          ================================
+          Unleash job details:
+                  IS_DRYRUN: ${IS_DRYRUN}
+            RELEASE_VERSION: ${EFFECTIVE_RELEASE_VERSION}
+              NEXT_SNAPSHOT: ${EFFECTIVE_NEXT_SNAPSHOT_VERSION}
+          ================================
+          ${MD_CODE}
+          END_OF_SUMMARY
+        env:
+          IS_DRYRUN: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING == 'true' }}
+          EFFECTIVE_RELEASE_VERSION: ${{ env.EFFECTIVE_RELEASE_VERSION }}
+          EFFECTIVE_NEXT_SNAPSHOT_VERSION: ${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}
+
       - name: Unleash project
         run: |
           # 
