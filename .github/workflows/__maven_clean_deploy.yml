@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------
 # This is a workflow to build a Maven project and deploy to Sonatype repos
 # ------------------------------------------------------------------------
-name: __Reusable Maven clean package deploy
+name: __Reusable Maven clean install deploy
 
 on:
   workflow_dispatch:
@@ -35,15 +35,15 @@ on:
 
     secrets:
       OSSRH_USERNAME:
-        required: true
+        required: false
       OSSRH_PASSWORD:
-        required: true
+        required: false
       OSSRH_GPG_SECRET_KEY:
-        required: true
+        required: false
       OSSRH_GPG_PASSPHRASE:
-        required: true
+        required: false
       TEST_REPO_KEY_PASSPHRASE:
-        required: true
+        required: false
 
     outputs:
       MAVEN_VERSION:
@@ -64,6 +64,11 @@ jobs:
     steps:
       - name: Propagate env from inputs
         run: |
+          if [[ -n "${{ secrets.OSSRH_GPG_PASSPHRASE }}" ]]; then
+            echo "IS_SECRETS_SET=true" >> $GITHUB_ENV
+          else
+            echo "IS_SECRETS_SET=false" >> $GITHUB_ENV
+          fi
           if [[ "${{ inputs.release_staging_to_maven_central }}" == "true" ]]; then
             echo "DO_NOT_RELEASE_SONATYPE_STAGING=false" >> $GITHUB_ENV
           else
@@ -91,6 +96,7 @@ jobs:
           echo "  inputs.runner:          ${{ inputs.runner }}"
           echo "  inputs.javaHomeVersion: ${{ inputs.javaHomeVersion }}"
           echo "  inputs.mavenVersion:    ${{ inputs.mavenVersion }}"
+          echo "  env.IS_SECRETS_SET:     ${{ env.IS_SECRETS_SET }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
           echo "  env.DEPLOY_SNAPSHOTS_ONLY:           ${{ env.DEPLOY_SNAPSHOTS_ONLY }}"
           echo "  env.DRYRUN_RELEASE_DEPLOYMENT:       ${{ env.DRYRUN_RELEASE_DEPLOYMENT }}"
@@ -299,13 +305,13 @@ jobs:
           echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_OUTPUT
           echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_ENV
 
-      - name: Build and package artifacts
+      - name: Build and install artifacts
         run: |
           # -ntp Do not display transfer progress when downloading or uploading
           # -B   Run in non-interactive (batch) mode (disables output color)
           # -U   Forces a check for missing releases and updated snapshots on
           mvn ${{ env.MVN_NTP_OPTION }} -B -U \
-              clean package
+              clean install
         env:
           OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
           IS_SNAPSHOT_VERSION: ${{ env.IS_SNAPSHOT_VERSION }}
@@ -315,7 +321,7 @@ jobs:
           TEST_REPO_KEY_PASSPHRASE: ${{ secrets.TEST_REPO_KEY_PASSPHRASE }}
 
       - name: Publish to Sonatype and/or Maven Central Repo
-        if: env.IS_SNAPSHOT_VERSION == 'true' || env.DEPLOY_SNAPSHOTS_ONLY == 'false'
+        if: env.IS_SECRETS_SET == 'true' && (env.IS_SNAPSHOT_VERSION == 'true' || env.DEPLOY_SNAPSHOTS_ONLY == 'false')
         run: |
           # -ntp Do not display transfer progress when downloading or uploading
           # -B   Run in non-interactive (batch) mode (disables output color)
