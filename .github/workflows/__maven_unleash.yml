@@ -32,10 +32,15 @@ on:
         required: false
         type: string
         description: "If not blank, then the unleash plugin will perform this workflow. This implies that releaseToMavenCentral and enforceUnleashReleaseWorkflow will be ignored and env.DO_NOT_RELEASE_SONATYPE_STAGING is set true!"
+      unleashOptsToAppend:
+        required: false
+        type: string
+        description: "Unleash options to append to the mvn unleash commandline"
+        default: ''
       mavenOpts:
         required: false
         type: string
-        description: "Additional Maven options for the mvn commandline"
+        description: "Passed as env var MAVEN_OPTS to steps with mvn command"
         default: ''
       mavenVersion:
         required: false
@@ -213,16 +218,18 @@ jobs:
 
       - name: Show initial Maven setup result
         run: |
-          echo "PATH:      ${PATH}"
-          echo "JAVA_HOME: ${JAVA_HOME}"
-          mvn --version
+          echo "PATH:       ${PATH}"
+          echo "JAVA_HOME:  ${JAVA_HOME}"
           echo "MAVEN_OPTS: ${MAVEN_OPTS}"
+          mvn --version
           echo "##### BEGIN - settings.xml"
           cat ~/.m2/settings.xml
           echo "##### END - settings.xml"
           echo "##### BEGIN - toolchains.xml"
           cat ~/.m2/toolchains.xml
           echo "##### END - toolchains.xml"
+        env:
+          MAVEN_OPTS: ${{ inputs.mavenOpts }}
 
       - name: Validate Maven running properly with project POM
         run: |
@@ -230,10 +237,11 @@ jobs:
 
       - name: Set environment for project, compile and toolchain version
         run: |
+          echo "  MAVEN_OPTS: ${MAVEN_OPTS}"
           MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           MAVEN_COMPILER_TARGET=$(mvn -q -Dexpression=maven.compiler.target -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_COMPILER_TARGET:-${{ inputs.javaHomeVersion }}}"
-          # Strip off probable leading 1.
+          # Strip off probable leading '1.'
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_TOOLCHAIN_VERSION#1.*}"
           echo "  MAVEN_PROJECT_VERSION:   ${MAVEN_PROJECT_VERSION}"
           echo "  MAVEN_COMPILER_TARGET:   ${MAVEN_COMPILER_TARGET}"
@@ -254,10 +262,10 @@ jobs:
       - name: Show Maven version, settings.xml and toolchains.xml
         id: show-maven-version
         run: |
-          echo "PATH:      ${PATH}"
-          echo "JAVA_HOME: ${JAVA_HOME}"
-          mvn --version
+          echo "PATH:       ${PATH}"
+          echo "JAVA_HOME:  ${JAVA_HOME}"
           echo "MAVEN_OPTS: ${MAVEN_OPTS}"
+          mvn --version
           echo "##### BEGIN - settings.xml"
           cat ~/.m2/settings.xml
           echo "##### END - settings.xml"
@@ -267,6 +275,8 @@ jobs:
           # Set step outputs:
           echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_OUTPUT
           echo "MAVEN_VERSION=${{ inputs.mavenVersion }}" >> $GITHUB_ENV
+        env:
+          MAVEN_OPTS: ${{ inputs.mavenOpts }}
 
       - name: Determine effective release version and next dev version
         id: determine-unleash-versions
@@ -331,6 +341,7 @@ jobs:
                     RELEASE_VERSION: ${EFFECTIVE_RELEASE_VERSION}
                       NEXT_SNAPSHOT: ${EFFECTIVE_NEXT_SNAPSHOT_VERSION}
                       MAVEN_VERSION: ${MAVEN_VERSION}
+                         MAVEN_OPTS: ${MAVEN_OPTS}
               MAVEN_COMPILER_TARGET: ${MAVEN_COMPILER_TARGET}
             MAVEN_TOOLCHAIN_VERSION: ${MAVEN_TOOLCHAIN_VERSION}
           ========================================
@@ -341,6 +352,7 @@ jobs:
           EFFECTIVE_RELEASE_VERSION: ${{ env.EFFECTIVE_RELEASE_VERSION }}
           EFFECTIVE_NEXT_SNAPSHOT_VERSION: ${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}
           MAVEN_VERSION: ${{ env.MAVEN_VERSION }}
+          MAVEN_OPTS: ${{ inputs.mavenOpts }}
           MAVEN_COMPILER_TARGET: ${{ env.MAVEN_COMPILER_TARGET }}
           MAVEN_TOOLCHAIN_VERSION: ${{ env.MAVEN_TOOLCHAIN_VERSION }}
 
@@ -362,7 +374,8 @@ jobs:
           else
             echo "### INFO: unleash.cmdline.goal defined by POM"
           fi
-          echo "  UNLEASH_CMDLINE_GOAL: ${UNLEASH_CMDLINE_GOAL}"
+          echo "  UNLEASH_CMDLINE_GOAL:   ${UNLEASH_CMDLINE_GOAL}"
+          echo "  UNLEASH_OPTS_TO_APPEND: ${UNLEASH_OPTS_TO_APPEND}"
           #
           # -ntp Do not display transfer progress when downloading or uploading
           # -B   Run in non-interactive (batch) mode (disables output color)
@@ -380,7 +393,8 @@ jobs:
                 -Dunleash.scmUsernameEnvVar=UNLEASH_SCM_USERNAME \
                 -Dunleash.scmPasswordEnvVar=UNLEASH_SCM_PASSWORD \
                 -Dunleash.scmMessagePrefix="[unleash-maven-plugin] ${{ env.EFFECTIVE_RELEASE_VERSION }} ->  ${{ env.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}" \
-                -Dworkflow=${UNLEASH_WORKFLOW_FILE} ${{ inputs.mavenOpts }}
+                -Dworkflow=${UNLEASH_WORKFLOW_FILE} \
+                ${UNLEASH_OPTS_TO_APPEND}
           # not used:
           #   -Dunleash.releaseArgs
         env:
@@ -389,6 +403,8 @@ jobs:
           OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
           IS_SNAPSHOT_VERSION: false
           MVN_NTP_OPTION: ${{ env.MVN_NTP_OPTION }}
+          MAVEN_OPTS: ${{ inputs.mavenOpts }}
+          UNLEASH_OPTS_TO_APPEND: ${{ inputs.unleashOptsToAppend }}
           # We do not want to release to Maven Central via this action!
           # Releases shall be performed via unleash plugin only.
           DO_NOT_RELEASE_SONATYPE_STAGING: ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}
