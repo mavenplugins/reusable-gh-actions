@@ -208,6 +208,17 @@ jobs:
         run: |
           mvn ${{ env.MVN_NTP_OPTION }} -B -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate
 
+      - name: Determine IS_ORIGINAL_RELEASE_PROJECT
+        run: |
+          MAVEN_PROJECT_VERSION=$(mvn -q -Dexpression=project.version -DforceStdout ${{ env.MVN_HELP_VERSION_OPTION }} help:evaluate)
+          if [[ "${MAVEN_PROJECT_VERSION}" == *-SNAPSHOT ]]; then
+            IS_ORIGINAL_RELEASE_PROJECT="false"
+          else
+            IS_ORIGINAL_RELEASE_PROJECT="true"
+          fi
+          echo "  => IS_ORIGINAL_RELEASE_PROJECT=${IS_ORIGINAL_RELEASE_PROJECT}"
+          echo "IS_ORIGINAL_RELEASE_PROJECT=${IS_ORIGINAL_RELEASE_PROJECT}" >> $GITHUB_ENV
+
       - name: Enforce release version to dryrun a release deployment
         if: env.DRYRUN_RELEASE_DEPLOYMENT == 'true'
         run: |
@@ -270,10 +281,11 @@ jobs:
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_COMPILER_TARGET:-${{ inputs.javaHomeVersion }}}"
           # Strip off probable leading 1.
           MAVEN_TOOLCHAIN_VERSION="${MAVEN_TOOLCHAIN_VERSION#1.*}"
-          echo "  MAVEN_PROJECT_VERSION:   ${MAVEN_PROJECT_VERSION}"
-          echo "  IS_SNAPSHOT_VERSION:     ${IS_SNAPSHOT_VERSION}"
-          echo "  MAVEN_COMPILER_TARGET:   ${MAVEN_COMPILER_TARGET}"
-          echo "  MAVEN_TOOLCHAIN_VERSION: ${MAVEN_TOOLCHAIN_VERSION}"
+          echo "  MAVEN_PROJECT_VERSION:       ${MAVEN_PROJECT_VERSION}"
+          echo "  IS_ORIGINAL_RELEASE_PROJECT: ${IS_ORIGINAL_RELEASE_PROJECT}"
+          echo "  IS_SNAPSHOT_VERSION:         ${IS_SNAPSHOT_VERSION}"
+          echo "  MAVEN_COMPILER_TARGET:       ${MAVEN_COMPILER_TARGET}"
+          echo "  MAVEN_TOOLCHAIN_VERSION:     ${MAVEN_TOOLCHAIN_VERSION}"
           echo "MAVEN_PROJECT_VERSION=${MAVEN_PROJECT_VERSION}" >> $GITHUB_ENV
           echo "IS_SNAPSHOT_VERSION=${IS_SNAPSHOT_VERSION}" >> $GITHUB_ENV
           echo "MAVEN_COMPILER_TARGET=${MAVEN_COMPILER_TARGET}" >> $GITHUB_ENV
@@ -321,7 +333,11 @@ jobs:
           TEST_REPO_KEY_PASSPHRASE: ${{ secrets.TEST_REPO_KEY_PASSPHRASE }}
 
       - name: Publish to Sonatype and/or Maven Central Repo
-        if: env.IS_SECRETS_SET == 'true' && (env.IS_SNAPSHOT_VERSION == 'true' || env.DEPLOY_SNAPSHOTS_ONLY == 'false')
+        #
+        # Skip publishing of a release version, if the original project is a release version,
+        # BUT DO_NOT_RELEASE_SONATYPE_STAGING is true!
+        #
+        if: env.IS_SECRETS_SET == 'true' && (env.IS_SNAPSHOT_VERSION == 'true' || (env.DEPLOY_SNAPSHOTS_ONLY == 'false' && (env.IS_ORIGINAL_RELEASE_PROJECT == 'false' || env.DO_NOT_RELEASE_SONATYPE_STAGING == 'false')))
         run: |
           # -ntp Do not display transfer progress when downloading or uploading
           # -B   Run in non-interactive (batch) mode (disables output color)
