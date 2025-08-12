@@ -1,0 +1,120 @@
+# MIT License
+#
+# Copyright (c) 2023 mavenplugins
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# Configuration for Release Drafter: https://github.com/toolmantim/release-drafter
+name-template: $RESOLVED_VERSION
+tag-template: v$RESOLVED_VERSION
+version-template: $COMPLETE
+
+filter-by-commitish: true
+
+# Emoji reference: https://gitmoji.carloscuesta.me/
+categories:
+  - title: 💥 Breaking changes
+    labels: 
+      - breaking
+
+  - title: 🚨 Removed
+    labels:
+      - removed
+
+  - title: ⚠️ Deprecated
+    labels:
+      - deprecated
+
+  - title: 🎉 Major features and improvements
+    labels:
+      - major-enhancement
+      - major-rfe
+
+  - title: 🐛 Major bug fixes
+    labels:
+      - major-bug
+
+  - title: 🚀 New features and improvements
+    labels:
+      - enhancement
+      - feature
+      - rfe
+
+  - title: 🐛 Bug Fixes
+    labels:
+      - bug
+      - fix
+      - bugfix
+      - regression
+
+  - title: 👷 Changes for developers
+    labels:
+      - developer
+
+  - title: 📝 Documentation updates
+    labels:
+      - documentation
+
+  - title: 👻 Maintenance
+    labels: 
+      - chore
+      - internal
+      - maintenance
+
+  - title: 🔧 Build
+    labels:
+      - build
+      - github_actions
+
+  - title: 🚦 Tests
+    labels: 
+      - test
+      - tests
+
+  # Default label used by Dependabot
+  - title: 📦 Dependency updates
+    labels:
+      - dependencies
+    collapse-after: 15
+
+sort-direction: 'ascending'
+
+exclude-contributors:
+  - 'dependabot'
+  - 'dependabot[bot]'
+  - 'GitHub Action'
+
+exclude-labels:
+  - reverted
+  - no-changelog
+  - skip-changelog
+  - invalid
+
+change-template: '- $TITLE ([#$NUMBER]($URL)) @$AUTHOR'
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+#replacers:
+#  - search: '/\[(.*)-(\d+)\]*\s*-*\s*/g'
+#    replace: '[[$1-$2]](https://issues.apache.org/jira/browse/$1-$2) - '  
