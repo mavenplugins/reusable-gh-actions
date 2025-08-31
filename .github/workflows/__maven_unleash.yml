@@ -402,6 +402,7 @@ jobs:
           OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
           OSSRH_GPG_PASSPHRASE: ${{ secrets.OSSRH_GPG_PASSPHRASE }}
           IS_SNAPSHOT_VERSION: false
+          IS_UNLEASH_BUILD: true
           MVN_NTP_OPTION: ${{ env.MVN_NTP_OPTION }}
           MAVEN_OPTS: ${{ inputs.mavenOpts }}
           UNLEASH_OPTS_TO_APPEND: ${{ inputs.unleashOptsToAppend }}
