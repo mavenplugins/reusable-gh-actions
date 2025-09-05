@@ -21,6 +21,11 @@ on:
         default: '_release_notes'
         description: "Optional: _release_notes by default"
 
+# Default permissions
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   # Ensure that we run on tag references only
   job1_Validate_Tag_Reference:

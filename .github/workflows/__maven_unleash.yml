@@ -71,6 +71,11 @@ on:
         description: "The next development version having been applied"
         value: ${{ jobs.job1_Unleash_Project.outputs.EFFECTIVE_NEXT_SNAPSHOT_VERSION }}
 
+# Default permissions
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   job1_Unleash_Project:
     runs-on: ${{ inputs.runner }}
