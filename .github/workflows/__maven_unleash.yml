@@ -74,7 +74,6 @@ on:
 # Default permissions
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   job1_Unleash_Project:

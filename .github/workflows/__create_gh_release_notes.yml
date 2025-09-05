@@ -23,8 +23,7 @@ on:
 
 # Default permissions
 permissions:
-  contents: read
-  pull-requests: write
+  contents: write
 
 jobs:
   # Ensure that we run on tag references only
