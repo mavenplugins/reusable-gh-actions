@@ -77,5 +77,5 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - This is just a dummy placeholder to make the parser of GHCICD/release-notes-from-changelog@v1 happy!
 -->
 
-[Unreleased]: https://github.com/mavenplugins/reusable-gh-actions/releases/tag/v1.0.0..HEAD
+[Unreleased]: https://github.com/mavenplugins/reusable-gh-actions/compare/v1.0.0..HEAD
 [1.0.0]: https://github.com/mavenplugins/reusable-gh-actions/releases/tag/v1.0.0
