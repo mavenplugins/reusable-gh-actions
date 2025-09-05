@@ -50,6 +50,11 @@ on:
         description: "The Maven version job1 was run on"
         value: ${{ jobs.job1_Build_and_Deploy.outputs.MAVEN_VERSION }}
 
+# Default permissions
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   job1_Build_and_Deploy:
     runs-on: ${{ inputs.runner }}
