@@ -106,7 +106,7 @@ jobs:
           echo "  env.DRYRUN_RELEASE_DEPLOYMENT:       ${{ env.DRYRUN_RELEASE_DEPLOYMENT }}"
 
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Setup JAVA home with Maven settings for publishing to Maven Central
       - name: Setup JAVA home with Maven settings.xml

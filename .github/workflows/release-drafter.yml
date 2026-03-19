@@ -54,7 +54,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: 'false'
 
@@ -90,8 +90,7 @@ jobs:
 
     steps:
       # Drafts your next Release notes as Pull Requests are merged into the default branch
-      - uses: release-drafter/release-drafter@v6
+      - uses: release-drafter/release-drafter@v7
         with:
           version: ${{ needs.detect-version.outputs.version }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
