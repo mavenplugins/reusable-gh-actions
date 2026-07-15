@@ -111,7 +111,7 @@ jobs:
       # Setup JAVA home with Maven settings for publishing to Maven Central
       - name: Setup JAVA home with Maven settings.xml
         id: setup-java-home
-        uses: GHCICD/setup-java@vHEAD-GHCICD-1047
+        uses: GHCICD/setup-java@vHEAD-GHCICD-main
         with:
           java-version: ${{ inputs.javaHomeVersion }}
           distribution: zulu
@@ -297,12 +297,14 @@ jobs:
 
       - name: Add JAVA version for toolchain if required
         id: add-java-for-toolchain
-        uses: GHCICD/setup-java@vHEAD-GHCICD-1047
+        uses: GHCICD/setup-java@vHEAD-GHCICD-main
         if: env.MAVEN_TOOLCHAIN_VERSION != inputs.javaHomeVersion
         with:
           java-version: ${{ env.MAVEN_TOOLCHAIN_VERSION }}
           distribution: zulu
-          add-toolchain-only: true
+          # add-toolchain-only:
+          set-default: false
+          overwrite-settings: false
 
       - name: Show Maven version, settings.xml and toolchains.xml
         id: show-maven-version

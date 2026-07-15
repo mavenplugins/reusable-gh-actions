@@ -65,7 +65,7 @@ jobs:
           fi
           cat $GITHUB_OUTPUT
 
-      - uses: actions/setup-java@v4
+      - uses: GHCICD/setup-java@vHEAD-GHCICD-main
         if: steps.has-pom.outputs.status == 'true'
         with:
           java-version: '21'
