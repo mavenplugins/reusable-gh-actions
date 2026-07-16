@@ -47,6 +47,10 @@ on:
         type: string
         description: "Maven version to be used"
         default: '3.8.3'
+      mavenCacheKey:
+        required: false
+        type: string
+        description: "Cache key for Maven local repository cache"
 
     secrets:
       OSSRH_USERNAME:
@@ -118,6 +122,7 @@ jobs:
           echo "  inputs.javaHomeVersion: ${{ inputs.javaHomeVersion }}"
           echo "  inputs.mavenVersion:    ${{ inputs.mavenVersion }}"
           echo "  inputs.mavenOpts:       ${{ inputs.mavenOpts }}"
+          echo "  inputs.mavenCacheKey:   ${{ inputs.mavenCacheKey }}"
           echo "  inputs.releaseVersion:                ${{ inputs.releaseVersion }}"
           echo "  inputs.nextSnapshotVersion:           ${{ inputs.nextSnapshotVersion }}"
           echo "  env.DO_NOT_RELEASE_SONATYPE_STAGING:  ${{ env.DO_NOT_RELEASE_SONATYPE_STAGING }}"
@@ -132,6 +137,13 @@ jobs:
           # Explicitly provide the ref path rather than using the original triggering SHA,
           # since that might have changed by particular jobs in multi job scenarios
           ref: ${{ github.ref }}
+
+      - name: Cache Maven repo
+        if: ${{ inputs.mavenCacheKey != '' }}
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ inputs.mavenCacheKey }}
 
       # Setup JAVA home with Maven settings for publishing to Maven Central
       - name: Setup JAVA home with Maven settings.xml
