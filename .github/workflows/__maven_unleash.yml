@@ -125,7 +125,7 @@ jobs:
 
       # We must check out before setup-java, since that one is looking for a pom.xml!
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # We need full history! - otherwise we end up in "missing commits" issue on unleash plugin
           fetch-depth: 0

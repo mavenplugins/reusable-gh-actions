@@ -81,7 +81,7 @@ jobs:
           echo "  RELEASE_NAME:                     ${{ env.RELEASE_NAME }}"
 
       - name: Checkout this repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.release_ref }}
 
